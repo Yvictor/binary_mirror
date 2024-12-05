@@ -7,13 +7,15 @@ struct TestStruct {
     name: [u8; 10],
     #[bm(type = "i32")]
     value: [u8; 4],
+    no_type: [u8; 7],
 }
 
 #[test]
 fn test_struct_derivation() {
     let test = TestStruct {
-        name: *b"Hello\0\0\0\0\0",
-        value: *b"123\0",
+        name: *b"Hello     ",
+        value: *b"123 ",
+        no_type: *b"no_type",
     };
     
     assert_eq!(test.name(), "Hello");
@@ -23,8 +25,9 @@ fn test_struct_derivation() {
 #[test]
 fn test_invalid_number() {
     let test = TestStruct {
-        name: *b"Test\0\0\0\0\0\0",
+        name: *b"Test      ",
         value: *b"abc\0",
+        no_type: *b"no_type",
     };
     
     assert_eq!(test.name(), "Test");

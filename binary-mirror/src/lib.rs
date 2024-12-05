@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parenthesized, parse_macro_input, Data, DeriveInput, Fields, LitStr};
+use syn::{parse_macro_input, Data, DeriveInput, Fields, LitStr};
 
 #[proc_macro_derive(BinaryMirror, attributes(bm))]
 pub fn binary_mirror_derive(input: TokenStream) -> TokenStream {
@@ -23,9 +23,7 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
         .iter()
         .filter_map(|field| {
             let field_name = &field.ident;
-            let field_type = get_bm_type(&field.attrs);
-
-            field_type.map(|field_type| {
+            get_bm_type(&field.attrs).map(|field_type| {
                 match field_type.as_str() {
                     "str" => {
                         quote! {
@@ -72,33 +70,25 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
 fn get_bm_type(attrs: &[syn::Attribute]) -> Option<String> {
     let mut result: Option<String> = None;
     for attr in attrs {
+        println!("attr: {:?}", attr);
         if attr.path().is_ident("bm") {
-            let _ = attr.parse_nested_meta(|meta| {
+            let r = attr.parse_nested_meta(|meta| {
+                // println!("meta_path: {:?}", meta.path);
+                // println!("meta_input: {:?}", meta.input);
                 if meta.path.is_ident("type") {
-                    let content;
-                    parenthesized!(content in meta.input);
-                    let lit = content.parse::<LitStr>()?;
-                    println!("lit: {}", lit.value());
+                    // println!("meta is type: {:?}", meta.path.is_ident("type"));
+                    let lit = meta.value()?.parse::<LitStr>()?;
+                    // println!("lit: {:?}", lit.value());
                     result = Some(lit.value());
                     return Ok(());
                 }
                 Ok(())
             });
+            println!("r: {:?}", r);
         }
     }
     result
 }
-//if let Ok(Meta::List(meta_list)) = attr.parse_nested_meta() {
-//     for nested in meta_list.nested.iter() {
-//         if let NestedMeta::Meta(Meta::NameValue(nv)) = nested {
-//             if nv.path.is_ident("type") {
-//                 if let Lit::Str(lit_str) = &nv.lit {
-//                     return lit_str.value();
-//                 }
-//             }
-//         }
-//     }
-// }
 
 #[cfg(test)]
 mod tests {
