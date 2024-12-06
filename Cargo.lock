@@ -153,6 +153,7 @@ dependencies = [
 name = "binary-mirror"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "pretty_assertions",
  "proc-macro2",
  "quote",
