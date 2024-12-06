@@ -1,7 +1,7 @@
 use binary_mirror::BinaryMirror;
 
 #[repr(C)]
-#[derive(Debug, BinaryMirror)]
+#[derive(BinaryMirror)]
 pub struct SomePayload {
     #[bm(type = "str")]
     company: [u8; 7],

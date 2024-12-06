@@ -13,6 +13,7 @@ struct FieldAttrs {
     type_name: String,
     alias: Option<String>,
     format: Option<String>,
+    datetime_with: Option<String>,
 }
 
 fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
@@ -26,25 +27,46 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
         _ => panic!("Only structs are supported"),
     };
 
+    let field_debugs: Vec<_> = fields
+        .iter()
+        .filter_map(|f| {
+            let field_name = &f.ident;
+            Some(quote! {
+                .field(
+                    stringify!(#field_name),
+                    &format_args!("[{}]", 
+                        self.#field_name
+                            .iter()
+                            .map(|b| format!("0x{:02x}", b))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                )
+            })
+        })
+        .collect();
+
     let methods: Vec<_> = fields
         .iter()
         .filter_map(|field| {
             let field_name = &field.ident;
             get_field_attrs(&field.attrs).map(|attrs| {
-                let method_name = if let Some(alias) = attrs.alias {
-                    quote::format_ident!("{}", alias)
+                let method_name = if let Some(alias) = &attrs.alias {
+                    if attrs.type_name != "date" || attrs.datetime_with.is_none() {
+                        quote::format_ident!("{}", alias)
+                    } else {
+                        field_name.clone().unwrap()
+                    }
                 } else {
                     field_name.clone().unwrap()
                 };
 
-                match attrs.type_name.as_str() {
-                    "str" => {
-                        quote! {
-                            pub fn #method_name(&self) -> String {
-                                String::from_utf8_lossy(&self.#field_name).trim().to_string()
-                            }
+                let base_method = match attrs.type_name.as_str() {
+                    "str" => quote! {
+                        pub fn #method_name(&self) -> String {
+                            String::from_utf8_lossy(&self.#field_name).trim().to_string()
                         }
-                    }
+                    },
                     "i32" | "i64" | "u32" | "u64" | "f32" | "f64" => {
                         let type_ident = quote::format_ident!("{}", attrs.type_name);
                         quote! {
@@ -55,28 +77,52 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
                                     .ok()
                             }
                         }
-                    }
-                    "decimal" => {
-                        quote! {
-                            pub fn #method_name(&self) -> Option<rust_decimal::Decimal> {
-                                String::from_utf8_lossy(&self.#field_name)
-                                    .trim()
-                                    .parse::<rust_decimal::Decimal>()
-                                    .ok()
-                            }
+                    },
+                    "decimal" => quote! {
+                        pub fn #method_name(&self) -> Option<rust_decimal::Decimal> {
+                            String::from_utf8_lossy(&self.#field_name)
+                                .trim()
+                                .parse::<rust_decimal::Decimal>()
+                                .ok()
                         }
-                    }
+                    },
                     "date" => {
                         let format = attrs.format.unwrap_or_else(|| "%Y%m%d".to_string());
-                        quote! {
+                        
+                        let date_method = quote! {
                             pub fn #method_name(&self) -> Option<chrono::NaiveDate> {
                                 chrono::NaiveDate::parse_from_str(
                                     String::from_utf8_lossy(&self.#field_name).trim(),
                                     #format
                                 ).ok()
                             }
+                        };
+
+                        if let Some(time_field) = &attrs.datetime_with {
+                            let datetime_name = if let Some(datetime_alias) = attrs.alias {
+                                quote::format_ident!("{}", datetime_alias)
+                            } else {
+                                quote::format_ident!("datetime")
+                            };
+                            
+                            let time_ident = quote::format_ident!("{}", time_field);
+                            
+                            quote! {
+                                #date_method
+
+                                pub fn #datetime_name(&self) -> Option<chrono::NaiveDateTime> {
+                                    let date = chrono::NaiveDate::parse_from_str(
+                                        String::from_utf8_lossy(&self.#field_name).trim(),
+                                        #format
+                                    ).ok()?;
+                                    let time = self.#time_ident()?;
+                                    Some(chrono::NaiveDateTime::new(date, time))
+                                }
+                            }
+                        } else {
+                            date_method
                         }
-                    }
+                    },
                     "time" => {
                         let format = attrs.format.unwrap_or_else(|| "%H%M%S".to_string());
                         quote! {
@@ -87,9 +133,11 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
                                 ).ok()
                             }
                         }
-                    }
+                    },
                     _ => panic!("Unsupported type: {}", attrs.type_name),
-                }
+                };
+
+                base_method
             })
         })
         .collect();
@@ -97,6 +145,14 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
     let gen = quote! {
         impl #name {
             #(#methods)*
+        }
+
+        impl std::fmt::Debug for #name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.debug_struct(stringify!(#name))
+                    #(#field_debugs)*
+                    .finish()
+            }
         }
     };
 
@@ -110,6 +166,7 @@ fn get_field_attrs(attrs: &[syn::Attribute]) -> Option<FieldAttrs> {
                 type_name: String::new(),
                 alias: None,
                 format: None,
+                datetime_with: None,
             };
 
             let _ = attr.parse_nested_meta(|meta| {
@@ -122,6 +179,9 @@ fn get_field_attrs(attrs: &[syn::Attribute]) -> Option<FieldAttrs> {
                 } else if meta.path.is_ident("format") {
                     let lit = meta.value()?.parse::<LitStr>()?;
                     field_attrs.format = Some(lit.value());
+                } else if meta.path.is_ident("datetime_with") {
+                    let lit = meta.value()?.parse::<LitStr>()?;
+                    field_attrs.datetime_with = Some(lit.value());
                 }
                 Ok(())
             });
