@@ -161,8 +161,6 @@ dependencies = [
  "binary-mirror-derive",
  "bytes",
  "cargo-expand",
- "chrono",
- "rust_decimal",
  "tracing",
  "tracing-subscriber",
 ]
