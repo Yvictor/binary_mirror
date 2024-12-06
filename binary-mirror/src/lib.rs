@@ -8,6 +8,12 @@ pub fn binary_mirror_derive(input: TokenStream) -> TokenStream {
     impl_binary_mirror(&input)
 }
 
+#[proc_macro_derive(BinaryEnum, attributes(bv))]
+pub fn binary_enum_derive(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    impl_binary_enum(&input)
+}
+
 #[derive(Debug)]
 struct FieldAttrs {
     type_name: String,
@@ -15,6 +21,7 @@ struct FieldAttrs {
     format: Option<String>,
     datetime_with: Option<String>,
     skip: bool,
+    enum_type: Option<String>,
 }
 
 fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
@@ -148,6 +155,17 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
                             }
                         }
                     },
+                    "enum" => {
+                        let enum_type = attrs.enum_type.as_ref()
+                            .expect("enum_type attribute is required for enum type");
+                        let enum_ident = quote::format_ident!("{}", enum_type);
+                        
+                        quote! {
+                            pub fn #method_name(&self) -> Option<#enum_ident> {
+                                #enum_ident::from_bytes(&self.#field_name)
+                            }
+                        }
+                    },
                     _ => panic!("Unsupported type: {}", attrs.type_name),
                 };
 
@@ -242,6 +260,12 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
                             None => write!(f, "{}: <invalid>", stringify!(#method_name))?,
                         }
                     },
+                    "enum" => quote! {
+                        match self.#method_name() {
+                            Some(val) => write!(f, "{}: {:?}", stringify!(#method_name), val)?,
+                            None => write!(f, "{}: <invalid>", stringify!(#method_name))?,
+                        }
+                    },
                     _ => quote! {},
                 };
                 Some(tokens)
@@ -282,6 +306,7 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
     gen.into()
 }
 
+
 fn get_field_attrs(attrs: &[syn::Attribute]) -> Option<FieldAttrs> {
     for attr in attrs {
         if attr.path().is_ident("bm") {
@@ -291,6 +316,7 @@ fn get_field_attrs(attrs: &[syn::Attribute]) -> Option<FieldAttrs> {
                 format: None,
                 datetime_with: None,
                 skip: false,
+                enum_type: None,
             };
 
             let _ = attr.parse_nested_meta(|meta| {
@@ -308,6 +334,9 @@ fn get_field_attrs(attrs: &[syn::Attribute]) -> Option<FieldAttrs> {
                     field_attrs.datetime_with = Some(lit.value());
                 } else if meta.path.is_ident("skip") {
                     field_attrs.skip = meta.value()?.parse::<syn::LitBool>()?.value();
+                } else if meta.path.is_ident("enum_type") {
+                    let lit = meta.value()?.parse::<LitStr>()?;
+                    field_attrs.enum_type = Some(lit.value());
                 }
                 Ok(())
             });
@@ -319,6 +348,61 @@ fn get_field_attrs(attrs: &[syn::Attribute]) -> Option<FieldAttrs> {
     }
     None
 }
+
+fn get_variant_value(attrs: &[syn::Attribute]) -> Option<u8> {
+    for attr in attrs {
+        if attr.path().is_ident("bv") {
+            let mut byte_value = None;
+            let _ = attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("value") {
+                    let lit = meta.value()?.parse::<syn::LitByteStr>()?;
+                    if let Some(&value) = lit.value().first() {
+                        byte_value = Some(value);
+                    }
+                }
+                Ok(())
+            });
+            return byte_value;
+        }
+    }
+    None
+}
+
+fn impl_binary_enum(input: &DeriveInput) -> TokenStream {
+    let name = &input.ident;
+
+    let variants = match &input.data {
+        Data::Enum(data) => &data.variants,
+        _ => panic!("BinaryEnum can only be derived for enums"),
+    };
+
+    let match_arms = variants.iter().map(|variant| {
+        let variant_ident = &variant.ident;
+        let byte_value = get_variant_value(&variant.attrs)
+            .unwrap_or_else(|| {
+                let variant_str = variant_ident.to_string().to_uppercase();
+                variant_str.chars().next().unwrap() as u8
+            });
+        
+        quote! {
+            Some(#byte_value) => Some(Self::#variant_ident),
+        }
+    });
+
+    let gen = quote! {
+        impl #name {
+            pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+                match bytes.get(0) {
+                    #(#match_arms)*
+                    _ => None,
+                }
+            }
+        }
+    };
+
+    gen.into()
+}
+
 
 #[cfg(test)]
 mod tests {

@@ -1,6 +1,20 @@
-use binary_mirror::BinaryMirror;
+use binary_mirror::{BinaryMirror, BinaryEnum};
 use rust_decimal::prelude::*;
 use chrono::{NaiveDate, NaiveTime, NaiveDateTime};
+
+#[derive(Debug, PartialEq, BinaryEnum)]
+enum OrderSide {
+    #[bv(value = b"B")]
+    Buy,
+    #[bv(value = b"S")]
+    Sell,
+}
+
+#[derive(Debug, PartialEq, BinaryEnum)]
+enum Direction {
+    Up,    // Will use b'U'
+    Down,  // Will use b'D'
+}
 
 #[repr(C)]
 #[derive(BinaryMirror)]
@@ -20,6 +34,8 @@ struct TestStruct {
     date: [u8; 8],
     #[bm(type = "time", format = "%H%M%S", skip = true)]
     time: [u8; 6],
+    #[bm(type = "enum", enum_type = "OrderSide")]
+    side: [u8; 1],
 }
 
 #[test]
@@ -33,6 +49,7 @@ fn test_struct_derivation() {
         exh: *b"CME       ",
         date: *b"20240101",
         time: *b"123456",
+        side: *b"B",
     };
     println!("{:?}", test);
     
@@ -50,6 +67,7 @@ fn test_struct_derivation() {
             NaiveTime::from_hms_opt(12, 34, 56).unwrap()
         ))
     );
+    assert_eq!(test.side(), Some(OrderSide::Buy));
 }
 
 #[test]
@@ -63,6 +81,7 @@ fn test_invalid_number() {
         exh: *b"CME       ",
         date: *b"xxxxxxxx",
         time: *b"xxxxxx",
+        side: *b" ",
     };
     
     assert_eq!(test.name(), "Test");
@@ -72,6 +91,7 @@ fn test_invalid_number() {
     assert_eq!(test.datetime(), None);
     assert_eq!(test.date(), None);
     assert_eq!(test.time(), None);
+    assert_eq!(test.side(), None);
 }
 
 #[test]
@@ -85,6 +105,7 @@ fn test_debug_format() {
         exh: *b"CME       ",
         date: *b"20240101",
         time: *b"123456",
+        side: *b"B",
     };
     
     println!("{:#?}", test);
@@ -101,11 +122,12 @@ fn test_display_format() {
         exh: *b"CME       ",
         date: *b"20240101",
         time: *b"123456",
+        side: *b"B",
     };
     
     // Will print:
     // TestStruct { name: Hello, value: 123, decimal: 123.45, f32: 123.4, exchange: CME, datetime: 2024-01-01T12:34:56 }
-    assert_eq!(format!("{}", test), "TestStruct { name: Hello, value: 123, decimal: 123.45, f32: 123.4, exchange: CME, datetime: 2024-01-01T12:34:56 }");
+    assert_eq!(format!("{}", test), "TestStruct { name: Hello, value: 123, decimal: 123.45, f32: 123.4, exchange: CME, datetime: 2024-01-01T12:34:56, side: Buy }");
 
     let invalid = TestStruct {
         name: *b"Test      ",
@@ -116,10 +138,25 @@ fn test_display_format() {
         exh: *b"CME       ",
         date: *b"xxxxxxxx",
         time: *b"xxxxxx",
+        side: *b" ",
     };
     
     // Will print:
     // TestStruct { name: Test, value: <invalid>, decimal: <invalid>, f32: <invalid>, exchange: CME, date: <invalid>, datetime: <invalid>, time: <invalid> }
     println!("{}", invalid);
-    assert_eq!(format!("{}", invalid), "TestStruct { name: Test, value: <invalid>, decimal: <invalid>, f32: <invalid>, exchange: CME, datetime: <invalid> }");
-} 
+    assert_eq!(format!("{}", invalid), "TestStruct { name: Test, value: <invalid>, decimal: <invalid>, f32: <invalid>, exchange: CME, datetime: <invalid>, side: <invalid> }");
+}
+
+#[test]
+fn test_binary_enum() {
+    // Test custom byte values
+    assert_eq!(OrderSide::from_bytes(b"B"), Some(OrderSide::Buy));
+    assert_eq!(OrderSide::from_bytes(b"S"), Some(OrderSide::Sell));
+    assert_eq!(OrderSide::from_bytes(b"X"), None);
+
+    // Test default behavior
+    assert_eq!(Direction::from_bytes(b"U"), Some(Direction::Up));
+    assert_eq!(Direction::from_bytes(b"D"), Some(Direction::Down));
+    assert_eq!(Direction::from_bytes(b"X"), None);
+}
+
