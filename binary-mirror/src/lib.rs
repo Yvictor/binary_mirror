@@ -14,6 +14,7 @@ struct FieldAttrs {
     alias: Option<String>,
     format: Option<String>,
     datetime_with: Option<String>,
+    skip: bool,
 }
 
 fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
@@ -155,6 +156,99 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
         })
         .collect();
 
+    let display_fields: Vec<_> = fields
+        .iter()
+        .filter_map(|field| {
+            let field_name = &field.ident;
+            get_field_attrs(&field.attrs).and_then(|attrs| {
+                if attrs.skip && (attrs.type_name != "date" || attrs.datetime_with.is_none()) {
+                    return None;
+                }
+
+                let method_name = if let Some(alias) = &attrs.alias {
+                    if attrs.type_name != "date" || attrs.datetime_with.is_none() {
+                        quote::format_ident!("{}", alias)
+                    } else {
+                        field_name.clone().unwrap()
+                    }
+                } else {
+                    field_name.clone().unwrap()
+                };
+
+                let tokens = match attrs.type_name.as_str() {
+                    "str" => quote! {
+                        write!(f, "{}: {}", stringify!(#method_name), self.#method_name())?;
+                    },
+                    "i32" | "i64" | "u32" | "u64" | "f32" | "f64" => quote! {
+                        match self.#method_name() {
+                            Some(val) => write!(f, "{}: {}", stringify!(#method_name), val)?,
+                            None => write!(f, "{}: <invalid>", stringify!(#method_name))?,
+                        }
+                    },
+                    "decimal" => quote! {
+                        match self.#method_name() {
+                            Some(val) => write!(f, "{}: {}", stringify!(#method_name), val.normalize())?,
+                            None => write!(f, "{}: <invalid>", stringify!(#method_name))?,
+                        }
+                    },
+                    "date" => {
+                        if attrs.skip {
+                            if let Some(_) = &attrs.datetime_with {
+                                let datetime_name = if let Some(datetime_alias) = attrs.alias {
+                                    quote::format_ident!("{}", datetime_alias)
+                                } else {
+                                    quote::format_ident!("datetime")
+                                };
+                                
+                                quote! {
+                                    match self.#datetime_name() {
+                                        Some(val) => write!(f, "{}: {}", stringify!(#datetime_name), val.format("%Y-%m-%dT%H:%M:%S"))?,
+                                        None => write!(f, "{}: <invalid>", stringify!(#datetime_name))?,
+                                    }
+                                }
+                            } else {
+                                return None;
+                            }
+                        } else {
+                            let mut tokens = quote! {
+                                match self.#method_name() {
+                                    Some(val) => write!(f, "{}: {}", stringify!(#method_name), val)?,
+                                    None => write!(f, "{}: <invalid>", stringify!(#method_name))?,
+                                }
+                            };
+
+                            if let Some(_) = &attrs.datetime_with {
+                                let datetime_name = if let Some(datetime_alias) = attrs.alias {
+                                    quote::format_ident!("{}", datetime_alias)
+                                } else {
+                                    quote::format_ident!("datetime")
+                                };
+                                
+                                tokens = quote! {
+                                    #tokens
+                                    write!(f, ", ")?;
+                                    match self.#datetime_name() {
+                                        Some(val) => write!(f, "{}: {}", stringify!(#datetime_name), val.format("%Y-%m-%dT%H:%M:%S"))?,
+                                        None => write!(f, "{}: <invalid>", stringify!(#datetime_name))?,
+                                    }
+                                };
+                            }
+                            tokens
+                        }
+                    },
+                    "time" => quote! {
+                        match self.#method_name() {
+                            Some(val) => write!(f, "{}: {}", stringify!(#method_name), val)?,
+                            None => write!(f, "{}: <invalid>", stringify!(#method_name))?,
+                        }
+                    },
+                    _ => quote! {},
+                };
+                Some(tokens)
+            })
+        })
+        .collect();
+
     let gen = quote! {
         impl #name {
             #(#methods)*
@@ -165,6 +259,22 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
                 f.debug_struct(stringify!(#name))
                     #(#field_debugs)*
                     .finish()
+            }
+        }
+
+        impl std::fmt::Display for #name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{} {{ ", stringify!(#name))?;
+                let mut first = true;
+                #(
+                    if first {
+                        first = false;
+                    } else {
+                        write!(f, ", ")?;
+                    }
+                    #display_fields
+                )*
+                write!(f, " }}")
             }
         }
     };
@@ -180,6 +290,7 @@ fn get_field_attrs(attrs: &[syn::Attribute]) -> Option<FieldAttrs> {
                 alias: None,
                 format: None,
                 datetime_with: None,
+                skip: false,
             };
 
             let _ = attr.parse_nested_meta(|meta| {
@@ -195,6 +306,8 @@ fn get_field_attrs(attrs: &[syn::Attribute]) -> Option<FieldAttrs> {
                 } else if meta.path.is_ident("datetime_with") {
                     let lit = meta.value()?.parse::<LitStr>()?;
                     field_attrs.datetime_with = Some(lit.value());
+                } else if meta.path.is_ident("skip") {
+                    field_attrs.skip = meta.value()?.parse::<syn::LitBool>()?.value();
                 }
                 Ok(())
             });
