@@ -34,12 +34,25 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
             Some(quote! {
                 .field(
                     stringify!(#field_name),
-                    &format_args!("[{}]", 
+                    &format_args!("hex: [{}], bytes: \"{}\"", 
                         self.#field_name
                             .iter()
                             .map(|b| format!("0x{:02x}", b))
                             .collect::<Vec<_>>()
-                            .join(", ")
+                            .join(", "),
+                        self.#field_name
+                            .iter()
+                            .map(|&b| {
+                                match b {
+                                    0x0A => "\\n".to_string(),
+                                    0x0D => "\\r".to_string(),
+                                    0x09 => "\\t".to_string(),
+                                    0x20..=0x7E => (b as char).to_string(),
+                                    _ => format!("\\x{:02x}", b),
+                                }
+                            })
+                            .collect::<Vec<String>>()
+                            .join("")
                     )
                 )
             })
