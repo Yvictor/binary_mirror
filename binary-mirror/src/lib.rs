@@ -8,6 +8,12 @@ pub fn binary_mirror_derive(input: TokenStream) -> TokenStream {
     impl_binary_mirror(&input)
 }
 
+#[derive(Debug)]
+struct FieldAttrs {
+    type_name: String,
+    alias: Option<String>,
+}
+
 fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
     let name = &input.ident;
 
@@ -23,28 +29,35 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
         .iter()
         .filter_map(|field| {
             let field_name = &field.ident;
-            get_bm_type(&field.attrs).map(|field_type| {
-                match field_type.as_str() {
+            get_field_attrs(&field.attrs).map(|attrs| {
+                let method_name = if let Some(alias) = attrs.alias {
+                    quote::format_ident!("{}", alias)
+                } else {
+                    field_name.clone().unwrap()
+                };
+
+                match attrs.type_name.as_str() {
                     "str" => {
                         quote! {
-                            pub fn #field_name(&self) -> String {
+                            pub fn #method_name(&self) -> String {
                                 String::from_utf8_lossy(&self.#field_name).trim().to_string()
                             }
                         }
                     }
-                    "i32" => {
+                    "i32" | "i64" | "u32" | "u64" | "f32" | "f64" => {
+                        let type_ident = quote::format_ident!("{}", attrs.type_name);
                         quote! {
-                            pub fn #field_name(&self) -> Option<i32> {
+                            pub fn #method_name(&self) -> Option<#type_ident> {
                                 String::from_utf8_lossy(&self.#field_name)
                                     .trim()
-                                    .parse::<i32>()
+                                    .parse::<#type_ident>()
                                     .ok()
                             }
                         }
                     }
                     "decimal" => {
                         quote! {
-                            pub fn #field_name(&self) -> Option<rust_decimal::Decimal> {
+                            pub fn #method_name(&self) -> Option<rust_decimal::Decimal> {
                                 String::from_utf8_lossy(&self.#field_name)
                                     .trim()
                                     .parse::<rust_decimal::Decimal>()
@@ -52,7 +65,7 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
                             }
                         }
                     }
-                    _ => panic!("Unsupported type: {}", field_type),
+                    _ => panic!("Unsupported type: {}", attrs.type_name),
                 }
             })
         })
@@ -67,27 +80,31 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
     gen.into()
 }
 
-fn get_bm_type(attrs: &[syn::Attribute]) -> Option<String> {
-    let mut result: Option<String> = None;
+fn get_field_attrs(attrs: &[syn::Attribute]) -> Option<FieldAttrs> {
     for attr in attrs {
-        println!("attr: {:?}", attr);
         if attr.path().is_ident("bm") {
-            let r = attr.parse_nested_meta(|meta| {
-                // println!("meta_path: {:?}", meta.path);
-                // println!("meta_input: {:?}", meta.input);
+            let mut field_attrs = FieldAttrs {
+                type_name: String::new(),
+                alias: None,
+            };
+
+            let _ = attr.parse_nested_meta(|meta| {
                 if meta.path.is_ident("type") {
-                    // println!("meta is type: {:?}", meta.path.is_ident("type"));
                     let lit = meta.value()?.parse::<LitStr>()?;
-                    // println!("lit: {:?}", lit.value());
-                    result = Some(lit.value());
-                    return Ok(());
+                    field_attrs.type_name = lit.value();
+                } else if meta.path.is_ident("alias") {
+                    let lit = meta.value()?.parse::<LitStr>()?;
+                    field_attrs.alias = Some(lit.value());
                 }
                 Ok(())
             });
-            println!("r: {:?}", r);
+
+            if !field_attrs.type_name.is_empty() {
+                return Some(field_attrs);
+            }
         }
     }
-    result
+    None
 }
 
 #[cfg(test)]
