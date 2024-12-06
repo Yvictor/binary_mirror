@@ -1,4 +1,4 @@
-use binary_mirror::BinaryMirror;
+use binary_mirror_derive::BinaryMirror;
 
 #[repr(C)]
 #[derive(BinaryMirror)]
@@ -33,11 +33,4 @@ fn main() {
     };
     
     println!("{:?}", payload);
-//     // 同時運行伺服器和客戶端
-//     tokio::join!(
-//         server::run_query_server(),
-//         server::run_order_server(),
-//         client::run_query_client(),
-//         client::run_order_client()
-//     );
 }

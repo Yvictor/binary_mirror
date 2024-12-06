@@ -1,4 +1,4 @@
-use binary_mirror::{BinaryMirror, BinaryEnum};
+use binary_mirror_derive::{BinaryMirror, BinaryEnum};
 use rust_decimal::prelude::*;
 use chrono::{NaiveDate, NaiveTime, NaiveDateTime};
 

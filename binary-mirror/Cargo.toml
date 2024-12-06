@@ -2,17 +2,12 @@
 name = "binary-mirror"
 version = "0.1.0"
 edition = "2021"
+description = "Core types for binary-mirror derive macro"
+license = "MIT"
+repository = "https://github.com/yourusername/binary-mirror"
+documentation = "https://docs.rs/binary-mirror-core"
+readme = "README.md"
+keywords = ["binary", "serialization", "derive"]
+categories = ["encoding", "parsing"]
 
-[lib]
-proc-macro = true
-
-[dependencies]
-syn = { version = "2.0", features = ["full", "extra-traits"] }
-quote = "1.0"
-proc-macro2 = "1.0"
-rust_decimal = "1.36.0"
-chrono = "0.4"
-
-[dev-dependencies]
-trybuild = "1.0"
-pretty_assertions = "1.4" 
+[dependencies] 

@@ -152,7 +152,26 @@ dependencies = [
 [[package]]
 name = "binary-mirror"
 version = "0.1.0"
+
+[[package]]
+name = "binary-mirror-demo"
+version = "0.1.0"
 dependencies = [
+ "binary-mirror",
+ "binary-mirror-derive",
+ "bytes",
+ "cargo-expand",
+ "chrono",
+ "rust_decimal",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "binary-mirror-derive"
+version = "0.1.0"
+dependencies = [
+ "binary-mirror",
  "chrono",
  "pretty_assertions",
  "proc-macro2",
@@ -783,19 +802,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
-]
-
-[[package]]
-name = "oms"
-version = "0.1.0"
-dependencies = [
- "binary-mirror",
- "bytes",
- "cargo-expand",
- "chrono",
- "rust_decimal",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

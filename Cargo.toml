@@ -1,5 +1,5 @@
 [package]
-name = "oms"
+name = "binary-mirror-demo"
 version = "0.1.0"
 edition = "2021"
 
@@ -11,12 +11,11 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 chrono = "0.4"
 bytes = "1.5"
 rust_decimal = "1.33"
-
-[dependencies.binary-mirror]
-path = "binary-mirror"
+binary-mirror = { path = "binary-mirror" }
+binary-mirror-derive = { path = "binary-mirror-derive" }
 
 [workspace]
-members = ["binary-mirror"]
+members = ["binary-mirror", "binary-mirror-derive"]
 
 [dev-dependencies]
 cargo-expand = "1.0"
