@@ -274,8 +274,62 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
         .collect();
 
     let gen = quote! {
+        #[derive(Debug)]
+        pub struct BytesSizeError {
+            expected: usize,
+            actual: usize,
+            bytes: String,
+        }
+
+        impl std::fmt::Display for BytesSizeError {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "bytes size mismatch: expected {} bytes but got {} bytes, content: \"{}\"", 
+                    self.expected, 
+                    self.actual,
+                    self.bytes
+                )
+            }
+        }
+
+        impl std::error::Error for BytesSizeError {}
+
         impl #name {
             #(#methods)*
+
+            /// Create a new instance from bytes
+            /// Returns Err if the bytes length doesn't match the struct size
+            pub fn from_bytes(bytes: &[u8]) -> Result<&Self, BytesSizeError> {
+                let expected = Self::size();
+                let actual = bytes.len();
+                if actual != expected {
+                    return Err(BytesSizeError { 
+                        expected, 
+                        actual,
+                        bytes: bytes.iter()
+                        .map(|&b| {
+                            match b {
+                                0x0A => "\\n".to_string(),
+                                0x0D => "\\r".to_string(),
+                                0x09 => "\\t".to_string(),
+                                0x20..=0x7E => (b as char).to_string(),
+                                _ => format!("\\x{:02x}", b),
+                            }
+                        })
+                        .collect::<Vec<String>>()
+                        .join(""),
+                    });
+                }
+                // Safety: 
+                // 1. We've verified the size matches
+                // 2. The struct is #[repr(C)]
+                // 3. The alignment is handled by the compiler
+                Ok(unsafe { &*(bytes.as_ptr() as *const Self) })
+            }
+
+            /// Get the size of the struct in bytes
+            pub fn size() -> usize {
+                std::mem::size_of::<Self>()
+            }
         }
 
         impl std::fmt::Debug for #name {

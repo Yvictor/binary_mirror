@@ -38,6 +38,7 @@ struct TestStruct {
     side: [u8; 1],
 }
 
+
 #[test]
 fn test_struct_derivation() {
     let test = TestStruct {
@@ -160,3 +161,23 @@ fn test_binary_enum() {
     assert_eq!(Direction::from_bytes(b"X"), None);
 }
 
+#[test]
+fn test_struct_from_bytes() {
+    let bytes = b"Hello     123 no_type000000123.4500000000123.4CME       20240101123456B";
+    let test = TestStruct::from_bytes(bytes).expect("Should parse successfully");
+    assert_eq!(test.name(), "Hello");
+    assert_eq!(test.value(), Some(123));
+
+    // Test wrong size
+    let wrong_size = b"too short with some \xff special \x00 bytes";
+    let err = TestStruct::from_bytes(wrong_size).unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        format!(
+            "bytes size mismatch: expected {} bytes but got {} bytes, content: \"{}\"",
+            TestStruct::size(),
+            wrong_size.len(),
+            "too short with some \\xff special \\x00 bytes"
+        )
+    );
+}
