@@ -307,6 +307,25 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
                 Ok(unsafe { &*(bytes.as_ptr() as *const Self) })
             }
 
+            /// Convert the struct back to its binary representation
+            pub fn to_bytes(&self) -> &[u8] {
+                // Safety: 
+                // 1. The struct is #[repr(C)]
+                // 2. We're reading the exact size of the struct
+                // 3. All fields are byte arrays
+                // 4. The returned slice lifetime is tied to self
+                unsafe {
+                    std::slice::from_raw_parts(
+                        (self as *const Self) as *const u8,
+                        Self::size()
+                    )
+                }
+            }
+
+            pub fn to_bytes_owned(&self) -> Vec<u8> {
+                self.to_bytes().to_vec()
+            }
+
             /// Get the size of the struct in bytes
             pub fn size() -> usize {
                 std::mem::size_of::<Self>()

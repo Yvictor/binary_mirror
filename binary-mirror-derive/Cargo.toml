@@ -22,7 +22,9 @@ proc-macro2 = "1.0"
 rust_decimal = "1.36"
 chrono = "0.4"
 binary-mirror = { version = "0.1.0", path = "../binary-mirror" }
+serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
 trybuild = "1.0"
 pretty_assertions = "1.4" 
+serde_json = "1.0"

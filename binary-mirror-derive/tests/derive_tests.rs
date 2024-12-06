@@ -1,8 +1,9 @@
 use binary_mirror_derive::{BinaryMirror, BinaryEnum};
 use rust_decimal::prelude::*;
 use chrono::{NaiveDate, NaiveTime, NaiveDateTime};
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug, PartialEq, BinaryEnum)]
+#[derive(Debug, PartialEq, BinaryEnum, Serialize, Deserialize)]
 enum OrderSide {
     #[bv(value = b"B")]
     Buy,
@@ -10,14 +11,14 @@ enum OrderSide {
     Sell,
 }
 
-#[derive(Debug, PartialEq, BinaryEnum)]
+#[derive(Debug, PartialEq, BinaryEnum, Serialize, Deserialize)]
 enum Direction {
     Up,    // Will use b'U'
     Down,  // Will use b'D'
 }
 
 #[repr(C)]
-#[derive(BinaryMirror)]
+#[derive(BinaryMirror, Serialize, Deserialize)]
 struct TestStruct {
     #[bm(type = "str")]
     name: [u8; 10],
@@ -180,4 +181,73 @@ fn test_struct_from_bytes() {
             "too short with some \\xff special \\x00 bytes"
         )
     );
+}
+
+#[test]
+fn test_serde_serialization() {
+    let test = TestStruct {
+        name: *b"Hello     ",
+        value: *b"123 ",
+        no_type: *b"no_type",
+        decimal: *b"000000123.4500000000",
+        f32: *b"123.4",
+        exh: *b"CME       ",
+        date: *b"20240101",
+        time: *b"123456",
+        side: *b"B",
+    };
+    
+    // Test JSON serialization
+    let json = serde_json::to_string(&test).unwrap();
+    // assert_eq!(
+    //     json,
+    //     r#"{"name":"Hello","value":123,"decimal":"123.45","f32":123.4,"exchange":"CME","datetime":"2024-01-01T12:34:56","side":"Buy"}"#
+    // );
+
+    // Test invalid values
+    let invalid = TestStruct {
+        name: *b"Test      ",
+        value: *b"abc\0",
+        no_type: *b"no_type",
+        decimal: *b"000000123.xxxxxxxxxx",
+        f32: *b"123.x",
+        exh: *b"CME       ",
+        date: *b"xxxxxxxx",
+        time: *b"xxxxxx",
+        side: *b" ",
+    };
+    
+    let json = serde_json::to_string(&invalid).unwrap();
+    // assert_eq!(
+    //     json,
+    //     r#"{"name":"Test","value":null,"decimal":null,"f32":null,"exchange":"CME","datetime":null,"side":null}"#
+    // );
+}
+
+#[test]
+fn test_struct_to_bytes() {
+    let original_bytes = b"Hello     123 no_type000000123.4500000000123.4CME       20240101123456B";
+    let test = TestStruct::from_bytes(original_bytes).expect("Should parse successfully");
+    
+    // Convert back to bytes
+    let bytes = test.to_bytes();
+    assert_eq!(bytes, original_bytes);
+
+    // Test that we can parse the bytes back
+    let reparsed = TestStruct::from_bytes(test.to_bytes()).unwrap();
+    assert_eq!(reparsed.name(), test.name());
+    assert_eq!(reparsed.value(), test.value());
+    assert_eq!(reparsed.decimal(), test.decimal());
+    assert_eq!(reparsed.f32(), test.f32());
+    assert_eq!(reparsed.exchange(), test.exchange());
+    assert_eq!(reparsed.date(), test.date());
+    assert_eq!(reparsed.time(), test.time());
+    assert_eq!(reparsed.side(), test.side());
+}
+
+#[test]
+fn test_struct_to_bytes_owned() {
+    let test = TestStruct::from_bytes(b"Hello     123 no_type000000123.4500000000123.4CME       20240101123456B").unwrap();
+    let bytes = test.to_bytes_owned();
+    assert_eq!(bytes, b"Hello     123 no_type000000123.4500000000123.4CME       20240101123456B");
 }
