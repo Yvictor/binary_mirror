@@ -26,6 +26,7 @@ struct FieldAttrs {
 
 fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
     let name = &input.ident;
+    let native_name = quote::format_ident!("{}Native", name);
 
     let fields = match &input.data {
         Data::Struct(data) => match &data.fields {
@@ -105,6 +106,7 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
                                 .trim()
                                 .parse::<rust_decimal::Decimal>()
                                 .ok()
+                                .map(|d| { d.normalize() })
                         }
                     },
                     "date" => {
@@ -273,7 +275,85 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
         })
         .collect();
 
+    let native_fields = fields.iter().filter_map(|field| {
+        let field_name = &field.ident;
+        get_field_attrs(&field.attrs).map(|attrs| {
+            if attrs.skip && attrs.datetime_with.is_none() {
+                return None;
+            }
+
+            let field_ident = if let Some(alias) = &attrs.alias {
+                quote::format_ident!("{}", alias)
+            } else {
+                field_name.clone().unwrap()
+            };
+
+            let field_type = match attrs.type_name.as_str() {
+                "str" => quote!(String),
+                "i32" | "i64" | "u32" | "u64" | "f32" | "f64" => {
+                    let type_ident = quote::format_ident!("{}", attrs.type_name);
+                    quote!(Option<#type_ident>)
+                },
+                "decimal" => quote!(Option<rust_decimal::Decimal>),
+                "date" => {
+                    if attrs.datetime_with.is_some() {
+                        quote!(Option<chrono::NaiveDateTime>)
+                    } else {
+                        quote!(Option<chrono::NaiveDate>)
+                    }
+                },
+                "time" => quote!(Option<chrono::NaiveTime>),
+                "enum" => {
+                    let enum_type = attrs.enum_type.as_ref()
+                        .expect("enum_type attribute is required for enum type");
+                    let enum_ident = quote::format_ident!("{}", enum_type);
+                    quote!(Option<#enum_ident>)
+                },
+                _ => panic!("Unsupported type: {}", attrs.type_name),
+            };
+
+            Some(quote! {
+                pub #field_ident: #field_type
+            })
+        }).flatten()
+    });
+
+    let to_native_fields = fields.iter().filter_map(|field| {
+        let field_name = &field.ident;
+        get_field_attrs(&field.attrs).map(|attrs| {
+            if attrs.skip && attrs.datetime_with.is_none() {
+                return None;
+            }
+
+            let (native_field, getter_method) = if let Some(alias) = &attrs.alias {
+                let ident = quote::format_ident!("{}", alias);
+                (ident.clone(), ident)
+            } else {
+                let ident = field_name.clone().unwrap();
+                (ident.clone(), ident)
+            };
+
+            Some(match attrs.type_name.as_str() {
+                "str" => quote!(#native_field: self.#getter_method()),
+                "date" if attrs.datetime_with.is_some() => {
+                    if let Some(alias) = &attrs.alias {
+                        let datetime_method = quote::format_ident!("{}", alias);
+                        quote!(#native_field: self.#datetime_method())
+                    } else {
+                        quote!(#native_field: self.datetime())
+                    }
+                },
+                _ => quote!(#native_field: self.#getter_method()),
+            })
+        }).flatten()
+    });
+
     let gen = quote! {
+        #[derive(Debug, PartialEq, Serialize, Deserialize)]
+        pub struct #native_name {
+            #(#native_fields,)*
+        }
+
         impl #name {
             #(#methods)*
 
@@ -329,6 +409,12 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
             /// Get the size of the struct in bytes
             pub fn size() -> usize {
                 std::mem::size_of::<Self>()
+            }
+
+            pub fn to_native(&self) -> #native_name {
+                #native_name {
+                    #(#to_native_fields,)*
+                }
             }
         }
 

@@ -1,7 +1,7 @@
-use binary_mirror_derive::{BinaryMirror, BinaryEnum};
+use binary_mirror_derive::{BinaryEnum, BinaryMirror};
+use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use rust_decimal::prelude::*;
-use chrono::{NaiveDate, NaiveTime, NaiveDateTime};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, BinaryEnum, Serialize, Deserialize)]
 enum OrderSide {
@@ -13,12 +13,12 @@ enum OrderSide {
 
 #[derive(Debug, PartialEq, BinaryEnum, Serialize, Deserialize)]
 enum Direction {
-    Up,    // Will use b'U'
-    Down,  // Will use b'D'
+    Up,   // Will use b'U'
+    Down, // Will use b'D'
 }
 
 #[repr(C)]
-#[derive(BinaryMirror, Serialize, Deserialize)]
+#[derive(BinaryMirror)]
 struct TestStruct {
     #[bm(type = "str")]
     name: [u8; 10],
@@ -31,14 +31,19 @@ struct TestStruct {
     f32: [u8; 5],
     #[bm(type = "str", alias = "exchange")]
     exh: [u8; 10],
-    #[bm(type = "date", format = "%Y%m%d", datetime_with = "time", alias = "datetime", skip = true)]
+    #[bm(
+        type = "date",
+        format = "%Y%m%d",
+        datetime_with = "time",
+        alias = "datetime",
+        skip = true
+    )]
     date: [u8; 8],
     #[bm(type = "time", format = "%H%M%S", skip = true)]
     time: [u8; 6],
     #[bm(type = "enum", enum_type = "OrderSide")]
     side: [u8; 1],
 }
-
 
 #[test]
 fn test_struct_derivation() {
@@ -54,14 +59,20 @@ fn test_struct_derivation() {
         side: *b"B",
     };
     println!("{:?}", test);
-    
+
     assert_eq!(test.name(), "Hello");
     assert_eq!(test.value(), Some(123));
     assert_eq!(test.decimal(), Some(Decimal::from_str("123.45").unwrap()));
     assert_eq!(test.f32(), Some(123.4));
     assert_eq!(test.exchange(), "CME".to_string());
-    assert_eq!(test.date(), Some(NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()));
-    assert_eq!(test.time(), Some(NaiveTime::from_hms_opt(12, 34, 56).unwrap()));
+    assert_eq!(
+        test.date(),
+        Some(NaiveDate::from_ymd_opt(2024, 1, 1).unwrap())
+    );
+    assert_eq!(
+        test.time(),
+        Some(NaiveTime::from_hms_opt(12, 34, 56).unwrap())
+    );
     assert_eq!(
         test.datetime(),
         Some(NaiveDateTime::new(
@@ -85,7 +96,7 @@ fn test_invalid_number() {
         time: *b"xxxxxx",
         side: *b" ",
     };
-    
+
     assert_eq!(test.name(), "Test");
     assert_eq!(test.value(), None);
     assert_eq!(test.decimal(), None);
@@ -109,7 +120,7 @@ fn test_debug_format() {
         time: *b"123456",
         side: *b"B",
     };
-    
+
     println!("{:#?}", test);
 }
 
@@ -126,7 +137,7 @@ fn test_display_format() {
         time: *b"123456",
         side: *b"B",
     };
-    
+
     // Will print:
     // TestStruct { name: Hello, value: 123, decimal: 123.45, f32: 123.4, exchange: CME, datetime: 2024-01-01T12:34:56 }
     assert_eq!(format!("{}", test), "TestStruct { name: Hello, value: 123, decimal: 123.45, f32: 123.4, exchange: CME, datetime: 2024-01-01T12:34:56, side: Buy }");
@@ -142,7 +153,7 @@ fn test_display_format() {
         time: *b"xxxxxx",
         side: *b" ",
     };
-    
+
     // Will print:
     // TestStruct { name: Test, value: <invalid>, decimal: <invalid>, f32: <invalid>, exchange: CME, date: <invalid>, datetime: <invalid>, time: <invalid> }
     println!("{}", invalid);
@@ -196,13 +207,13 @@ fn test_serde_serialization() {
         time: *b"123456",
         side: *b"B",
     };
-    
+    let test_native = test.to_native();
     // Test JSON serialization
-    let json = serde_json::to_string(&test).unwrap();
-    // assert_eq!(
-    //     json,
-    //     r#"{"name":"Hello","value":123,"decimal":"123.45","f32":123.4,"exchange":"CME","datetime":"2024-01-01T12:34:56","side":"Buy"}"#
-    // );
+    let json = serde_json::to_string(&test_native).unwrap();
+    assert_eq!(
+        json,
+        r#"{"name":"Hello","value":123,"decimal":"123.45","f32":123.4,"exchange":"CME","datetime":"2024-01-01T12:34:56","side":"Buy"}"#
+    );
 
     // Test invalid values
     let invalid = TestStruct {
@@ -216,19 +227,19 @@ fn test_serde_serialization() {
         time: *b"xxxxxx",
         side: *b" ",
     };
-    
-    let json = serde_json::to_string(&invalid).unwrap();
-    // assert_eq!(
-    //     json,
-    //     r#"{"name":"Test","value":null,"decimal":null,"f32":null,"exchange":"CME","datetime":null,"side":null}"#
-    // );
+    let test_native = invalid.to_native();
+    let json = serde_json::to_string(&test_native).unwrap();
+    assert_eq!(
+        json,
+        r#"{"name":"Test","value":null,"decimal":null,"f32":null,"exchange":"CME","datetime":null,"side":null}"#
+    );
 }
 
 #[test]
 fn test_struct_to_bytes() {
     let original_bytes = b"Hello     123 no_type000000123.4500000000123.4CME       20240101123456B";
     let test = TestStruct::from_bytes(original_bytes).expect("Should parse successfully");
-    
+
     // Convert back to bytes
     let bytes = test.to_bytes();
     assert_eq!(bytes, original_bytes);
@@ -247,7 +258,13 @@ fn test_struct_to_bytes() {
 
 #[test]
 fn test_struct_to_bytes_owned() {
-    let test = TestStruct::from_bytes(b"Hello     123 no_type000000123.4500000000123.4CME       20240101123456B").unwrap();
+    let test = TestStruct::from_bytes(
+        b"Hello     123 no_type000000123.4500000000123.4CME       20240101123456B",
+    )
+    .unwrap();
     let bytes = test.to_bytes_owned();
-    assert_eq!(bytes, b"Hello     123 no_type000000123.4500000000123.4CME       20240101123456B");
+    assert_eq!(
+        bytes,
+        b"Hello     123 no_type000000123.4500000000123.4CME       20240101123456B"
+    );
 }

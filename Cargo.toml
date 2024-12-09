@@ -11,6 +11,10 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 binary-mirror = { path = "binary-mirror" }
 binary-mirror-derive = { path = "binary-mirror-derive" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.133"
+chrono = { version = "0.4", features = ["serde"] }
+rust_decimal = "1.36"
 
 [workspace]
 members = ["binary-mirror", "binary-mirror-derive"]

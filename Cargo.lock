@@ -152,6 +152,9 @@ dependencies = [
 [[package]]
 name = "binary-mirror"
 version = "0.1.0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "binary-mirror-demo"
@@ -161,6 +164,10 @@ dependencies = [
  "binary-mirror-derive",
  "bytes",
  "cargo-expand",
+ "chrono",
+ "rust_decimal",
+ "serde",
+ "serde_json",
  "tracing",
  "tracing-subscriber",
 ]
@@ -380,6 +387,7 @@ dependencies = [
  "iana-time-zone",
  "js-sys",
  "num-traits",
+ "serde",
  "wasm-bindgen",
  "windows-targets 0.52.6",
 ]

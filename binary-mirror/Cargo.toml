@@ -13,3 +13,4 @@ keywords = ["binary", "serialization", "derive"]
 categories = ["encoding", "parsing"]
 
 [dependencies] 
+serde = "1.0.215"
