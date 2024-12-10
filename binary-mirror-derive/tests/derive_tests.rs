@@ -45,6 +45,25 @@ struct TestStruct {
     side: [u8; 1],
 }
 
+#[repr(C)]
+#[derive(BinaryMirror)]
+struct WithDateTime {
+    #[bm(type = "datetime", format = "%Y%m%d%H%M%S")]
+    dt: [u8; 14],
+}
+
+#[test]
+fn test_with_datetime() {
+    let dt = WithDateTime {
+        dt: *b"20240101123456",
+    };
+    println!("{:?}", dt);
+    assert_eq!(dt.dt(), Some(NaiveDateTime::new(
+        NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+        NaiveTime::from_hms_opt(12, 34, 56).unwrap()
+    )));
+}
+
 #[test]
 fn test_struct_derivation() {
     let test = TestStruct {
@@ -65,14 +84,6 @@ fn test_struct_derivation() {
     assert_eq!(test.decimal(), Some(Decimal::from_str("123.45").unwrap()));
     assert_eq!(test.f32(), Some(123.4));
     assert_eq!(test.exchange(), "CME".to_string());
-    assert_eq!(
-        test.date(),
-        Some(NaiveDate::from_ymd_opt(2024, 1, 1).unwrap())
-    );
-    assert_eq!(
-        test.time(),
-        Some(NaiveTime::from_hms_opt(12, 34, 56).unwrap())
-    );
     assert_eq!(
         test.datetime(),
         Some(NaiveDateTime::new(
@@ -102,8 +113,6 @@ fn test_invalid_number() {
     assert_eq!(test.decimal(), None);
     assert_eq!(test.f32(), None);
     assert_eq!(test.datetime(), None);
-    assert_eq!(test.date(), None);
-    assert_eq!(test.time(), None);
     assert_eq!(test.side(), None);
 }
 
@@ -293,8 +302,7 @@ fn test_struct_to_bytes() {
     assert_eq!(reparsed.decimal(), test.decimal());
     assert_eq!(reparsed.f32(), test.f32());
     assert_eq!(reparsed.exchange(), test.exchange());
-    assert_eq!(reparsed.date(), test.date());
-    assert_eq!(reparsed.time(), test.time());
+    assert_eq!(reparsed.datetime(), test.datetime());
     assert_eq!(reparsed.side(), test.side());
 }
 

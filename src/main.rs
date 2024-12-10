@@ -44,6 +44,7 @@ fn main() {
     };
     
     println!("{:?}", payload);
+    println!("{}", payload);
     let native = payload.to_native();
     let json = serde_json::to_string(&native).unwrap();
     println!("{}", json);
