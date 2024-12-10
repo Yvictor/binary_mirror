@@ -236,6 +236,48 @@ fn test_serde_serialization() {
 }
 
 #[test]
+fn test_to_native() {
+    let test = TestStruct {
+        name: *b"Hello     ",
+        value: *b"123 ",
+        no_type: *b"no_type",
+        decimal: *b"000000123.4500000000",
+        f32: *b"123.4",
+        exh: *b"CME       ",
+        date: *b"20240101",
+        time: *b"123456",
+        side: *b"B",
+    };
+    let native = test.to_native();
+    assert_eq!(native.name, test.name());
+}
+
+#[test]
+fn test_struct_from_native() {
+    let test = TestStruct {
+        name: *b"Hello     ",
+        value: *b"123 ",
+        no_type: *b"no_type",
+        decimal: *b"000000123.4500000000",
+        f32: *b"123.4",
+        exh: *b"CME       ",
+        date: *b"20240101",
+        time: *b"123456",
+        side: *b"B",
+    };
+    let native = test.to_native();
+    // let parsed = TestStruct::from_native(&native);
+    // assert_eq!(parsed.name(), test.name());
+    // assert_eq!(parsed.value(), test.value());
+    // assert_eq!(parsed.decimal(), test.decimal());
+    // assert_eq!(parsed.f32(), test.f32());
+    // assert_eq!(parsed.exchange(), test.exchange());
+    // assert_eq!(parsed.date(), test.date());
+    // assert_eq!(parsed.time(), test.time());
+    // assert_eq!(parsed.side(), test.side());
+}
+
+#[test]
 fn test_struct_to_bytes() {
     let original_bytes = b"Hello     123 no_type000000123.4500000000123.4CME       20240101123456B";
     let test = TestStruct::from_bytes(original_bytes).expect("Should parse successfully");

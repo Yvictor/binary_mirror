@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Fields, LitStr};
+use syn::{parse_macro_input, Data, DeriveInput, Fields, LitStr, Field};
 
 #[proc_macro_derive(BinaryMirror, attributes(bm))]
 pub fn binary_mirror_derive(input: TokenStream) -> TokenStream {
@@ -23,6 +23,33 @@ struct FieldAttrs {
     skip: bool,
     enum_type: Option<String>,
 }
+
+fn extract_array_size(field: &Field) -> usize {
+    if let syn::Type::Array(array) = &field.ty {
+        if let syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Int(ref lit_int),
+            ..
+        }) = array.len {
+            return lit_int.base10_parse::<usize>().expect("Could not parse array length");
+        }
+        panic!("Field is not an array");
+    }
+    panic!("Field is not an array");
+}
+
+fn get_field_size(input: &DeriveInput) -> Vec<(syn::Ident, usize)> {
+    let fields = match &input.data {
+        Data::Struct(data) => match &data.fields {
+            Fields::Named(fields) => &fields.named,
+            _ => panic!("Only named fields are supported"),
+        },
+        _ => panic!("Only structs are supported"),
+    };
+
+    let out: Vec<(syn::Ident, usize)> = fields.iter().map(|f| (f.ident.clone().unwrap(), extract_array_size(f))).collect::<Vec<_>>();
+    out
+}
+
 
 fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
     let name = &input.ident;
@@ -348,6 +375,12 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
         }).flatten()
     });
 
+    let _native_field_size = get_field_size(input);
+    // let from_native_fields = native_field_size.iter().map(|field| {
+    //     quote!(#field.0: #field.1)
+    // });
+
+
     let gen = quote! {
         #[derive(Debug, PartialEq, Serialize, Deserialize)]
         pub struct #native_name {
@@ -416,6 +449,12 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
                     #(#to_native_fields,)*
                 }
             }
+
+            // pub fn from_native(native: &#native_name) -> Self {
+            //     Self {
+            //         #(#from_native_fields,)*
+            //     }
+            // }
         }
 
         impl std::fmt::Debug for #name {
@@ -488,6 +527,8 @@ fn get_field_attrs(attrs: &[syn::Attribute]) -> Option<FieldAttrs> {
     }
     None
 }
+
+
 
 fn get_variant_value(attrs: &[syn::Attribute]) -> Option<u8> {
     for attr in attrs {
