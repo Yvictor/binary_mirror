@@ -266,8 +266,10 @@ fn test_struct_from_native() {
     let test = TestStruct {
         name: *b"Hello     ",
         value: *b"123 ",
-        no_type: *b"no_type",
-        decimal: *b"000000123.4500000000",
+        no_type: *b"       ",
+        // no_type: *b"no_type",
+        decimal: *b"123.45              ",
+        // decimal: *b"000000123.4500000000",
         f32: *b"123.4",
         exh: *b"CME       ",
         date: *b"20240101",
@@ -275,16 +277,23 @@ fn test_struct_from_native() {
         side: *b"B",
     };
     let native = test.to_native();
-    // let parsed = TestStruct::from_native(&native);
-    // assert_eq!(parsed.name(), test.name());
-    // assert_eq!(parsed.value(), test.value());
-    // assert_eq!(parsed.decimal(), test.decimal());
-    // assert_eq!(parsed.f32(), test.f32());
-    // assert_eq!(parsed.exchange(), test.exchange());
-    // assert_eq!(parsed.date(), test.date());
-    // assert_eq!(parsed.time(), test.time());
-    // assert_eq!(parsed.side(), test.side());
+    let parsed = TestStruct::from_native(&native);
+    assert_eq!(parsed.name(), test.name());
+    assert_eq!(parsed.value(), test.value());
+    assert_eq!(parsed.decimal(), test.decimal());
+    assert_eq!(parsed.f32(), test.f32());
+    assert_eq!(parsed.exchange(), test.exchange());
+    assert_eq!(parsed.datetime(), test.datetime());
+    assert_eq!(parsed.side(), test.side());
+
+    let bytes = test.to_bytes();
+    let parsed_bytes = parsed.to_bytes();
+    println!("{:?}", test);
+    println!("{:?}", parsed);
+    assert_eq!(bytes, parsed_bytes);
+
 }
+
 
 #[test]
 fn test_struct_to_bytes() {
@@ -317,4 +326,29 @@ fn test_struct_to_bytes_owned() {
         bytes,
         b"Hello     123 no_type000000123.4500000000123.4CME       20240101123456B"
     );
+}
+
+#[test]
+fn test_binary_enum_roundtrip() {
+    // Test custom byte values
+    assert_eq!(OrderSide::Buy.as_bytes(), b"B");
+    assert_eq!(OrderSide::Sell.as_bytes(), b"S");
+    
+    // Test roundtrip
+    let buy = OrderSide::from_bytes(b"B").unwrap();
+    assert_eq!(OrderSide::from_bytes(buy.as_bytes()), Some(OrderSide::Buy));
+    
+    let sell = OrderSide::from_bytes(b"S").unwrap();
+    assert_eq!(OrderSide::from_bytes(sell.as_bytes()), Some(OrderSide::Sell));
+
+    // Test default behavior
+    assert_eq!(Direction::Up.as_bytes(), b"U");
+    assert_eq!(Direction::Down.as_bytes(), b"D");
+    
+    // Test roundtrip with default behavior
+    let up = Direction::from_bytes(b"U").unwrap();
+    assert_eq!(Direction::from_bytes(up.as_bytes()), Some(Direction::Up));
+    
+    let down = Direction::from_bytes(b"D").unwrap();
+    assert_eq!(Direction::from_bytes(down.as_bytes()), Some(Direction::Down));
 }

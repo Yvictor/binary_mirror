@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Field, Fields, LitStr};
+use syn::{parse_macro_input, Data, DeriveInput, Fields, LitStr};
 
 #[proc_macro_derive(BinaryMirror, attributes(bm))]
 pub fn binary_mirror_derive(input: TokenStream) -> TokenStream {
@@ -31,13 +31,20 @@ struct OriginField {
     attrs: Option<FieldAttrs>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct NativeField {
     name: syn::Ident,
     ty: proc_macro2::TokenStream,
     origin_fields: Vec<OriginField>, // Store the complete OriginField for reference
     is_combined_datetime: bool,
 }
+
+#[derive(Debug)]
+struct NativeField2OriginFieldMap {
+    origin_field: OriginField,
+    native_field: Option<NativeField>,
+}
+
 
 fn get_field_attrs(attrs: &[syn::Attribute]) -> Option<FieldAttrs> {
     for attr in attrs {
@@ -121,8 +128,9 @@ fn get_origin_fields(input: &DeriveInput) -> Vec<OriginField> {
         .collect()
 }
 
-fn get_native_fields(origin_fields: &[OriginField]) -> Vec<NativeField> {
+fn get_native_fields_and_map(origin_fields: &[OriginField]) -> (Vec<NativeField>, Vec<NativeField2OriginFieldMap>) {
     let mut native_fields = Vec::new();
+    let mut native_field_map = Vec::new();
     let mut processed = std::collections::HashSet::new();
 
     for field in origin_fields {
@@ -147,8 +155,7 @@ fn get_native_fields(origin_fields: &[OriginField]) -> Vec<NativeField> {
                         .expect("Could not find time field");
 
                     processed.insert(time_field.name.to_string());
-
-                    native_fields.push(NativeField {
+                    let native_field = NativeField {
                         name: if let Some(alias) = &attrs.alias {
                             quote::format_ident!("{}", alias)
                         } else {
@@ -157,6 +164,15 @@ fn get_native_fields(origin_fields: &[OriginField]) -> Vec<NativeField> {
                         ty: quote!(Option<chrono::NaiveDateTime>),
                         origin_fields: vec![field.clone(), time_field.clone()],
                         is_combined_datetime: true,
+                    };
+                    native_fields.push(native_field.clone());
+                    native_field_map.push(NativeField2OriginFieldMap {
+                        origin_field: field.clone(),
+                        native_field: Some(native_field.clone()),
+                    });
+                    native_field_map.push(NativeField2OriginFieldMap {
+                        origin_field: time_field.clone(),
+                        native_field: Some(native_field),
                     });
                 }
                 _ => {
@@ -171,25 +187,40 @@ fn get_native_fields(origin_fields: &[OriginField]) -> Vec<NativeField> {
                         "date" => quote!(Option<chrono::NaiveDate>),
                         "time" => quote!(Option<chrono::NaiveTime>),
                         "enum" => {
-                            let enum_type = attrs.enum_type.as_ref().unwrap();
-                            let enum_ident = quote::format_ident!("{}", enum_type);
-                            quote!(Option<#enum_ident>)
+                            let enum_type = attrs.enum_type.as_ref();
+                            match enum_type {
+                                Some(enum_type) => {
+                                    let enum_ident = quote::format_ident!("{}", enum_type);
+                                    quote!(Option<#enum_ident>)
+                                }
+                                None => panic!("enum_type is required for enum field"),
+                            }
                         }
                         _ => continue,
                     };
-
-                    native_fields.push(NativeField {
+                    let native_field = NativeField {
                         name: field_name,
                         ty,
                         origin_fields: vec![field.clone()],
                         is_combined_datetime: false,
+                    };
+
+                    native_fields.push(native_field.clone());
+                    native_field_map.push(NativeField2OriginFieldMap {
+                        origin_field: field.clone(),
+                        native_field: Some(native_field),
                     });
                 }
             }
+        } else {
+            native_field_map.push(NativeField2OriginFieldMap {
+                origin_field: field.clone(),
+                native_field: None,
+            });
         }
     }
 
-    native_fields
+    (native_fields, native_field_map)
 }
 
 fn get_debug_fields(origin_fields: &[OriginField]) -> Vec<proc_macro2::TokenStream> {
@@ -438,17 +469,99 @@ fn get_to_native_fields(native_fields: &[NativeField]) -> Vec<proc_macro2::Token
         .collect()
 }
 
+fn get_from_native_fields(native_field_map: &[NativeField2OriginFieldMap]) -> Vec<proc_macro2::TokenStream> {
+    native_field_map.iter().map(|mapping| {
+        let field_name = &mapping.origin_field.name;
+        let size = mapping.origin_field.size;
+
+        if let Some(native_field) = &mapping.native_field {
+            let native_name = &native_field.name;
+            let attrs = mapping.origin_field.attrs.as_ref().unwrap();
+
+            match attrs.type_name.as_str() {
+                "str" => quote! {
+                    #field_name: {
+                        let mut bytes = [b' '; #size];
+                        let s = native.#native_name.as_bytes();
+                        bytes[..s.len().min(#size)].copy_from_slice(&s[..s.len().min(#size)]);
+                        bytes
+                    }
+                },
+                "enum" => quote! {
+                    #field_name: {
+                        let mut bytes = [b' '; #size];
+                        if let Some(enum_val) = &native.#native_name {
+                            let s = enum_val.as_bytes();
+                            bytes[..s.len().min(#size)].copy_from_slice(&s[..s.len().min(#size)]);
+                        }
+                        bytes
+                    }
+                },
+                "date" if native_field.is_combined_datetime => {
+                    let format = attrs.format.as_ref()
+                        .map(String::as_str)
+                        .unwrap_or("%Y%m%d");
+                    quote! {
+                        #field_name: {
+                            let mut bytes = [b' '; #size];
+                            if let Some(dt) = native.#native_name {
+                                let s = dt.format(#format).to_string();
+                                let b = s.as_bytes();
+                                bytes[..b.len().min(#size)].copy_from_slice(&b[..b.len().min(#size)]);
+                            }
+                            bytes
+                        }
+                    }
+                },
+                "time" if native_field.is_combined_datetime => {
+                    let format = attrs.format.as_ref()
+                        .map(String::as_str)
+                        .unwrap_or("%H%M%S");
+                    quote! {
+                        #field_name: {
+                            let mut bytes = [b' '; #size];
+                            if let Some(dt) = native.#native_name {
+                                let s = dt.format(#format).to_string();
+                                let b = s.as_bytes();
+                                bytes[..b.len().min(#size)].copy_from_slice(&b[..b.len().min(#size)]);
+                            }
+                            bytes
+                        }
+                    }
+                },
+                _ => quote! {
+                    #field_name: {
+                        let mut bytes = [b' '; #size];
+                        if let Some(val) = &native.#native_name {
+                            let s = val.to_string();
+                            let b = s.as_bytes();
+                            bytes[..b.len().min(#size)].copy_from_slice(&b[..b.len().min(#size)]);
+                        }
+                        bytes
+                    }
+                }
+            }
+        } else {
+            // Field without attributes, just fill with spaces
+            quote! {
+                #field_name: [b' '; #size]
+            }
+        }
+    }).collect()
+}
+
 fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
     let name = &input.ident;
     let native_name = quote::format_ident!("{}Native", name);
 
     let origin_fields = get_origin_fields(input);
-    let native_fields = get_native_fields(&origin_fields);
+    let (native_fields, native_field_map) = get_native_fields_and_map(&origin_fields);
     let debug_fields_token = get_debug_fields(&origin_fields);
     let display_fields_token = get_display_fields(&native_fields);
     let methods = get_methods(&native_fields);
     let native_fields_token = get_native_fields_token(&native_fields);
     let to_native_fields_token = get_to_native_fields(&native_fields);
+    let from_native_fields_token = get_from_native_fields(&native_field_map);
 
     let gen = quote! {
         #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -519,11 +632,11 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
                 }
             }
 
-            // pub fn from_native(native: &#native_name) -> Self {
-            //     Self {
-            //         #(#from_native_fields,)*
-            //     }
-            // }
+            pub fn from_native(native: &#native_name) -> Self {
+                Self {
+                    #(#from_native_fields_token,)*
+                }
+            }
         }
 
         impl std::fmt::Debug for #name {
@@ -581,15 +694,27 @@ fn impl_binary_enum(input: &DeriveInput) -> TokenStream {
         _ => panic!("BinaryEnum can only be derived for enums"),
     };
 
-    let match_arms = variants.iter().map(|variant| {
+    let match_arms_from = variants.iter().map(|variant| {
         let variant_ident = &variant.ident;
         let byte_value = get_variant_value(&variant.attrs).unwrap_or_else(|| {
             let variant_str = variant_ident.to_string().to_uppercase();
             variant_str.chars().next().unwrap() as u8
         });
-
+        
         quote! {
             Some(#byte_value) => Some(Self::#variant_ident),
+        }
+    });
+
+    let match_arms_to = variants.iter().map(|variant| {
+        let variant_ident = &variant.ident;
+        let byte_value = get_variant_value(&variant.attrs).unwrap_or_else(|| {
+            let variant_str = variant_ident.to_string().to_uppercase();
+            variant_str.chars().next().unwrap() as u8
+        });
+        
+        quote! {
+            Self::#variant_ident => &[#byte_value],
         }
     });
 
@@ -597,8 +722,14 @@ fn impl_binary_enum(input: &DeriveInput) -> TokenStream {
         impl #name {
             pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
                 match bytes.get(0) {
-                    #(#match_arms)*
+                    #(#match_arms_from)*
                     _ => None,
+                }
+            }
+
+            pub fn as_bytes(&self) -> &'static [u8] {
+                match self {
+                    #(#match_arms_to)*
                 }
             }
         }

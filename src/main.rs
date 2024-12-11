@@ -1,5 +1,14 @@
-use binary_mirror_derive::BinaryMirror;
+use binary_mirror_derive::{BinaryMirror, BinaryEnum};
 use serde::{Serialize, Deserialize};
+
+
+#[derive(Debug, PartialEq, BinaryEnum, Serialize, Deserialize)]
+enum OrderSide {
+    #[bv(value = b"B")]
+    Buy,
+    #[bv(value = b"S")]
+    Sell,
+}
 
 #[repr(C)]
 #[derive(BinaryMirror)]
@@ -12,6 +21,8 @@ pub struct SomePayload {
     stkprc1: [u8; 20],
     #[bm(type = "i32")]
     ordqty: [u8; 4],
+    #[bm(type = "enum", enum_type = "OrderSide")]
+    side: [u8; 1],
     // #[bm(type = "date", format = "%Y%m%d")]
     // date: [u8; 8],
     // #[bm(type = "time", format = "%H%M%S")]
@@ -39,6 +50,7 @@ fn main() {
         exh: *b"EXCHANGE",
         stkprc1: *b"1234.56             ",
         ordqty: *b"1234",
+        side: *b"B",
         date: *b"20240101",
         time: *b"123456",
     };
