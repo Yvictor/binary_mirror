@@ -29,6 +29,23 @@ impl BytesSizeError {
     }
 }
 
+pub fn to_hex_repr(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(", ")
+}
+
+pub fn to_bytes_repr(bytes: &[u8]) -> String {
+    bytes.iter().map(|&b| {
+        match b {
+            0x0A => "\\n".to_string(),
+            0x0D => "\\r".to_string(),
+            0x09 => "\\t".to_string(),
+            0x20..=0x7E => (b as char).to_string(),
+            _ => format!("\\x{:02x}", b),
+        }
+    }).collect::<Vec<String>>().join("")
+}
+
+
 // pub mod strp {
 
 //     pub fn serialize<S>(value: &[u8], serializer: S) -> Result<S::Ok, S::Error>

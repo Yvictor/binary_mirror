@@ -31,6 +31,8 @@ pub struct SomePayload {
     date: [u8; 8],
     #[bm(type = "time", format = "%H%M%S", skip = true)]
     time: [u8; 6],
+    #[bm(type = "i32")]
+    err_case: [u8; 4],
 }
 
 // #[tokio::main]
@@ -53,6 +55,7 @@ fn main() {
         side: *b"B",
         date: *b"20240101",
         time: *b"123456",
+        err_case: *b"12xx",
     };
     
     println!("{:?}", payload);
@@ -62,4 +65,5 @@ fn main() {
     println!("{}", json);
     let parsed = serde_json::from_str::<SomePayloadNative>(&json).unwrap();
     println!("{:?}", parsed);
+
 }

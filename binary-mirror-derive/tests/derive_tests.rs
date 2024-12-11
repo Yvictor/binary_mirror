@@ -149,7 +149,7 @@ fn test_display_format() {
 
     // Will print:
     // TestStruct { name: Hello, value: 123, decimal: 123.45, f32: 123.4, exchange: CME, datetime: 2024-01-01T12:34:56 }
-    assert_eq!(format!("{}", test), "TestStruct { name: Hello, value: 123, decimal: 123.45, f32: 123.4, exchange: CME, datetime: 2024-01-01T12:34:56, side: Buy }");
+    assert_eq!(format!("{}", test), "TestStruct { name: Hello, value: 123, decimal: 123.45, f32: 123.4, exchange: CME, datetime: 2024-01-01 12:34:56, side: Buy }");
 
     let invalid = TestStruct {
         name: *b"Test      ",
@@ -164,9 +164,9 @@ fn test_display_format() {
     };
 
     // Will print:
-    // TestStruct { name: Test, value: <invalid>, decimal: <invalid>, f32: <invalid>, exchange: CME, date: <invalid>, datetime: <invalid>, time: <invalid> }
+    // TestStruct TestStruct { name: Test, value: Error<hex: [61, 62, 63, 00], bytes: "abc\x00">, decimal: Error<hex: [30, 30, 30, 30, 30, 30, 31, 32, 33, 2e, 78, 78, 78, 78, 78, 78, 78, 78, 78, 78], bytes: "000000123.xxxxxxxxxx">, f32: Error<hex: [31, 32, 33, 2e, 78], bytes: "123.x">, exchange: CME, datetime: Error<hex: [78, 78, 78, 78, 78, 78, 78, 78], bytes: "xxxxxxxx">, side: Error<hex: [20], bytes: " "> }
     println!("{}", invalid);
-    assert_eq!(format!("{}", invalid), "TestStruct { name: Test, value: <invalid>, decimal: <invalid>, f32: <invalid>, exchange: CME, datetime: <invalid>, side: <invalid> }");
+    assert_eq!(format!("{}", invalid), "TestStruct { name: Test, value: Error<hex: [61, 62, 63, 00], bytes: \"abc\\x00\">, decimal: Error<hex: [30, 30, 30, 30, 30, 30, 31, 32, 33, 2e, 78, 78, 78, 78, 78, 78, 78, 78, 78, 78], bytes: \"000000123.xxxxxxxxxx\">, f32: Error<hex: [31, 32, 33, 2e, 78], bytes: \"123.x\">, exchange: CME, datetime: Error<hex: [78, 78, 78, 78, 78, 78, 78, 78], bytes: \"xxxxxxxx\">, side: Error<hex: [20], bytes: \" \"> }");
 }
 
 #[test]
