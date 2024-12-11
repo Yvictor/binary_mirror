@@ -15,6 +15,8 @@ A derive macro for parsing fixed-length binary data structures. This crate provi
 - Zero-copy parsing
 - Custom field aliases
 - Skip fields in display output
+- Serde support with `to_native` method `from_native` method
+- Error reporting with raw bytes display
 
 ## Installation
 ```
@@ -49,6 +51,22 @@ assert_eq!(trade.value(), Some(123));
 assert_eq!(trade.qty(), Some(123.4));
 ```
 
+### Serde Support
+
+``` rust
+let trade = Trade {
+    name: b"AAPL ",
+    value: b"123 ",
+    qty: b"123.4",
+};
+let trade_native = trade.to_native();
+let json = serde_json::to_string(&trade_native).unwrap();
+println!("{}", json);
+let parsed = serde_json::from_str::<TradeNative>(&json).unwrap();
+println!("{:?}", parsed);
+let trade_from_native = Trade::from_native(&parsed);
+println!("{}", trade_from_native);
+```
 
 ### Custom Enums
 

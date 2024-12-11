@@ -22,7 +22,7 @@ resolver = "2"
 
 [workspace.package]
 authors = ["Yvictor <yvictor3141@gmail.com>"]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/Yvictor/binary_mirror"

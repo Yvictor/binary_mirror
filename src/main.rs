@@ -65,5 +65,6 @@ fn main() {
     println!("{}", json);
     let parsed = serde_json::from_str::<SomePayloadNative>(&json).unwrap();
     println!("{:?}", parsed);
-
+    let payload_from_native = SomePayload::from_native(&parsed);
+    println!("{}", payload_from_native);
 }
