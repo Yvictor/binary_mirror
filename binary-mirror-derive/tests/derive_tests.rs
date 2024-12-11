@@ -400,3 +400,42 @@ fn test_ignore_warn() {
     // No warning will be logged for value field
     assert_eq!(native.value, None);
 }
+
+#[test]
+fn test_native_builder() {
+    let native = TestStructNative::default()
+        .with_name("AAPL")
+        .with_value(123)
+        .with_decimal(Decimal::from_str("123.45").unwrap())
+        .with_f32(123.4)
+        .with_exchange("NYSE")
+        .with_datetime(NaiveDateTime::new(
+            NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            NaiveTime::from_hms_opt(12, 34, 56).unwrap()
+        ))
+        .with_side(OrderSide::Buy);
+
+    assert_eq!(native.name, "AAPL");
+    assert_eq!(native.value, Some(123));
+    assert_eq!(native.decimal, Some(Decimal::from_str("123.45").unwrap()));
+    assert_eq!(native.f32, Some(123.4));
+    assert_eq!(native.exchange, "NYSE");
+    assert_eq!(native.datetime, Some(NaiveDateTime::new(
+        NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+        NaiveTime::from_hms_opt(12, 34, 56).unwrap()
+    )));
+    assert_eq!(native.side, Some(OrderSide::Buy));
+
+    // Convert to binary format
+    let binary = TestStruct::from_native(&native);
+    assert_eq!(binary.name(), "AAPL");
+    assert_eq!(binary.value(), Some(123));
+    assert_eq!(binary.decimal(), Some(Decimal::from_str("123.45").unwrap()));
+    assert_eq!(binary.f32(), Some(123.4));
+    assert_eq!(binary.exchange(), "NYSE");
+    assert_eq!(binary.datetime(), Some(NaiveDateTime::new(
+        NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+        NaiveTime::from_hms_opt(12, 34, 56).unwrap()
+    )));
+    assert_eq!(binary.side(), Some(OrderSide::Buy));
+}

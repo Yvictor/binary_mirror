@@ -37,6 +37,8 @@ struct OriginField {
 struct NativeField {
     name: syn::Ident,
     ty: proc_macro2::TokenStream,
+    type_name: String,
+    pure_ty: proc_macro2::TokenStream,
     origin_fields: Vec<OriginField>, // Store the complete OriginField for reference
     is_combined_datetime: bool,
 }
@@ -172,6 +174,8 @@ fn get_native_fields_and_map(
                             quote::format_ident!("datetime")
                         },
                         ty: quote!(Option<chrono::NaiveDateTime>),
+                        type_name: "datetime".to_string(),
+                        pure_ty: quote!(chrono::NaiveDateTime),
                         origin_fields: vec![field.clone(), time_field.clone()],
                         is_combined_datetime: true,
                     };
@@ -186,22 +190,22 @@ fn get_native_fields_and_map(
                     });
                 }
                 _ => {
-                    let ty = match attrs.type_name.as_str() {
-                        "str" => quote!(String),
+                    let (ty, pure_ty) = match attrs.type_name.as_str() {
+                        "str" => (quote!(String), quote!(String)),
                         "i32" | "i64" | "u32" | "u64" | "f32" | "f64" => {
                             let type_ident = quote::format_ident!("{}", attrs.type_name);
-                            quote!(Option<#type_ident>)
+                            (quote!(Option<#type_ident>), quote!(#type_ident))
                         }
-                        "decimal" => quote!(Option<rust_decimal::Decimal>),
-                        "datetime" => quote!(Option<chrono::NaiveDateTime>),
-                        "date" => quote!(Option<chrono::NaiveDate>),
-                        "time" => quote!(Option<chrono::NaiveTime>),
+                        "decimal" => (quote!(Option<rust_decimal::Decimal>), quote!(rust_decimal::Decimal)),
+                        "datetime" => (quote!(Option<chrono::NaiveDateTime>), quote!(chrono::NaiveDateTime)),
+                        "date" => (quote!(Option<chrono::NaiveDate>), quote!(chrono::NaiveDate)),
+                        "time" => (quote!(Option<chrono::NaiveTime>), quote!(chrono::NaiveTime)),
                         "enum" => {
                             let enum_type = attrs.enum_type.as_ref();
                             match enum_type {
                                 Some(enum_type) => {
                                     let enum_ident = quote::format_ident!("{}", enum_type);
-                                    quote!(Option<#enum_ident>)
+                                    (quote!(Option<#enum_ident>), quote!(#enum_ident))
                                 }
                                 None => panic!("enum_type is required for enum field"),
                             }
@@ -211,6 +215,8 @@ fn get_native_fields_and_map(
                     let native_field = NativeField {
                         name: field_name,
                         ty,
+                        type_name: attrs.type_name.clone(),
+                        pure_ty,
                         origin_fields: vec![field.clone()],
                         is_combined_datetime: false,
                     };
@@ -617,6 +623,39 @@ fn get_from_native_fields(native_field_map: &[NativeField2OriginFieldMap]) -> Ve
     }).collect()
 }
 
+fn get_native_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
+    native_fields.iter().map(|field| {
+        let name = &field.name;
+        let method_name = quote::format_ident!("with_{}", name);
+        let ty = &field.pure_ty;
+        let type_name = &field.type_name;
+
+        match type_name.as_str() {
+            "str" => quote! {
+                pub fn #method_name(mut self, value: impl Into<String>) -> Self {
+                    self.#name = value.into();
+                    self
+                }
+            },
+            "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "decimal" | "datetime" | "date"
+            | "time" | "enum" => {
+                quote! {
+                    pub fn #method_name(mut self, value: #ty) -> Self {
+                        self.#name = Some(value);
+                        self
+                    }
+                }
+            },
+            _ => quote! {
+                pub fn #method_name(mut self, value: #ty) -> Self {
+                    self.#name = value;
+                    self
+                }
+            }
+        }
+    }).collect()
+}
+
 fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
     let name = &input.ident;
     let native_name = quote::format_ident!("{}Native", name);
@@ -629,11 +668,16 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
     let native_fields_token = get_native_fields_token(&native_fields);
     let to_native_fields_token = get_to_native_fields(&native_fields);
     let from_native_fields_token = get_from_native_fields(&native_field_map);
+    let native_methods = get_native_methods(&native_fields);
 
     let gen = quote! {
         #[derive(Debug, PartialEq, Serialize, Deserialize, Default)]
         pub struct #native_name {
             #(#native_fields_token,)*
+        }
+
+        impl #native_name {
+            #(#native_methods)*
         }
 
         impl #name {
