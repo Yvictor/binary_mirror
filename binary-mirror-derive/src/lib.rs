@@ -545,11 +545,12 @@ fn get_from_native_fields(native_field_map: &[NativeField2OriginFieldMap]) -> Ve
         let default_byte = mapping.origin_field.attrs
             .as_ref()
             .and_then(|attrs| attrs.default_byte)
-            .unwrap_or(b' ');  // Default to space if not specified
+            .unwrap_or(b' ');
 
         if let Some(native_field) = &mapping.native_field {
             let native_name = &native_field.name;
             let attrs = mapping.origin_field.attrs.as_ref().unwrap();
+            let format = attrs.format.as_ref().map(String::as_str);
 
             match attrs.type_name.as_str() {
                 "str" => quote! {
@@ -599,6 +600,34 @@ fn get_from_native_fields(native_field_map: &[NativeField2OriginFieldMap]) -> Ve
                                 bytes[..b.len().min(#size)].copy_from_slice(&b[..b.len().min(#size)]);
                             }
                             bytes
+                        }
+                    }
+                },
+                "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "decimal" => {
+                    if let Some(fmt) = format {
+                        quote! {
+                            #field_name: {
+                                let mut bytes = [#default_byte; #size];
+                                if let Some(val) = &native.#native_name {
+                                    let s = format!(#fmt, val);
+                                    println!("{}", #fmt);
+                                    let b = s.as_bytes();
+                                    bytes[..b.len().min(#size)].copy_from_slice(&b[..b.len().min(#size)]);
+                                }
+                                bytes
+                            }
+                        }
+                    } else {
+                        quote! {
+                            #field_name: {
+                                let mut bytes = [#default_byte; #size];
+                                if let Some(val) = &native.#native_name {
+                                    let s = val.to_string();
+                                    let b = s.as_bytes();
+                                    bytes[..b.len().min(#size)].copy_from_slice(&b[..b.len().min(#size)]);
+                                }
+                                bytes
+                            }
                         }
                     }
                 },

@@ -439,3 +439,42 @@ fn test_native_builder() {
     )));
     assert_eq!(binary.side(), Some(OrderSide::Buy));
 }
+
+#[repr(C)]
+#[derive(BinaryMirror)]
+struct WithNumberFormat {
+    #[bm(type = "i32", format = "{:04}")]  // Zero-padded 4 digits
+    value: [u8; 4],
+    #[bm(type = "f32", format = "{:09.3}")]  // 2 decimal places
+    price: [u8; 9],
+    #[bm(type = "f32", format = "{:010.3}")]
+    nagtive: [u8; 10],
+    #[bm(type = "decimal", format = "{:010.3}")]
+    decimal: [u8; 10],
+    #[bm(type = "decimal", format = "{:010.3}")]
+    decimal_with_neg: [u8; 10],
+}
+
+#[test]
+fn test_number_format() {
+    let native = WithNumberFormatNative::default()
+        .with_value(42)
+        .with_price(123.45)
+        .with_nagtive(-123.45)
+        .with_decimal(Decimal::from_str("123.45").unwrap())
+        .with_decimal_with_neg(Decimal::from_str("-123.45").unwrap());
+
+    let binary = WithNumberFormat::from_native(&native);
+    assert_eq!(binary.value(), Some(42));
+    assert_eq!(binary.price(), Some(123.45)); // Rounded to 2 decimals
+    assert_eq!(binary.nagtive(), Some(-123.45));
+    assert_eq!(binary.decimal(), Some(Decimal::from_str("123.45").unwrap()));
+    assert_eq!(binary.decimal_with_neg(), Some(Decimal::from_str("-123.45").unwrap())); 
+    // Check raw bytes format
+    println!("{:?}", binary);
+    assert_eq!(&binary.value, b"0042");
+    assert_eq!(&binary.price, b"00123.450");
+    assert_eq!(&binary.nagtive, b"-00123.450");
+    assert_eq!(&binary.decimal, b"000123.450");
+    assert_eq!(&binary.decimal_with_neg, b"-00123.450");
+}
