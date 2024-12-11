@@ -52,8 +52,12 @@ assert_eq!(trade.qty(), Some(123.4));
 ```
 
 ### Serde Support
+``` bash
+cargo add serde
+```
 
 ``` rust
+use serde::{Deserialize, Serialize};
 let trade = Trade {
     name: b"AAPL ",
     value: b"123 ",

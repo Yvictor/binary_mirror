@@ -22,6 +22,7 @@ struct FieldAttrs {
     datetime_with: Option<String>,
     skip: bool,
     enum_type: Option<String>,
+    default_byte: Option<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -55,6 +56,7 @@ fn get_field_attrs(attrs: &[syn::Attribute]) -> Option<FieldAttrs> {
                 datetime_with: None,
                 skip: false,
                 enum_type: None,
+                default_byte: None,
             };
 
             let _ = attr.parse_nested_meta(|meta| {
@@ -75,7 +77,10 @@ fn get_field_attrs(attrs: &[syn::Attribute]) -> Option<FieldAttrs> {
                 } else if meta.path.is_ident("enum_type") {
                     let lit = meta.value()?.parse::<LitStr>()?;
                     field_attrs.enum_type = Some(lit.value());
-                }
+                } else if meta.path.is_ident("default_byte") {                    
+                    let lit = meta.value()?.parse::<syn::LitByte>()?;
+                    field_attrs.default_byte = Some(lit.value());
+                } 
                 Ok(())
             });
 
@@ -520,12 +525,14 @@ fn get_to_native_fields(native_fields: &[NativeField]) -> Vec<proc_macro2::Token
         .collect()
 }
 
-fn get_from_native_fields(
-    native_field_map: &[NativeField2OriginFieldMap],
-) -> Vec<proc_macro2::TokenStream> {
+fn get_from_native_fields(native_field_map: &[NativeField2OriginFieldMap]) -> Vec<proc_macro2::TokenStream> {
     native_field_map.iter().map(|mapping| {
         let field_name = &mapping.origin_field.name;
         let size = mapping.origin_field.size;
+        let default_byte = mapping.origin_field.attrs
+            .as_ref()
+            .and_then(|attrs| attrs.default_byte)
+            .unwrap_or(b' ');  // Default to space if not specified
 
         if let Some(native_field) = &mapping.native_field {
             let native_name = &native_field.name;
@@ -534,7 +541,7 @@ fn get_from_native_fields(
             match attrs.type_name.as_str() {
                 "str" => quote! {
                     #field_name: {
-                        let mut bytes = [b' '; #size];
+                        let mut bytes = [#default_byte; #size];  // Use default_byte here
                         let s = native.#native_name.as_bytes();
                         bytes[..s.len().min(#size)].copy_from_slice(&s[..s.len().min(#size)]);
                         bytes
@@ -542,7 +549,7 @@ fn get_from_native_fields(
                 },
                 "enum" => quote! {
                     #field_name: {
-                        let mut bytes = [b' '; #size];
+                        let mut bytes = [#default_byte; #size];
                         if let Some(enum_val) = &native.#native_name {
                             let s = enum_val.as_bytes();
                             bytes[..s.len().min(#size)].copy_from_slice(&s[..s.len().min(#size)]);
@@ -556,7 +563,7 @@ fn get_from_native_fields(
                         .unwrap_or("%Y%m%d");
                     quote! {
                         #field_name: {
-                            let mut bytes = [b' '; #size];
+                            let mut bytes = [#default_byte; #size];
                             if let Some(dt) = native.#native_name {
                                 let s = dt.format(#format).to_string();
                                 let b = s.as_bytes();
@@ -572,7 +579,7 @@ fn get_from_native_fields(
                         .unwrap_or("%H%M%S");
                     quote! {
                         #field_name: {
-                            let mut bytes = [b' '; #size];
+                            let mut bytes = [#default_byte; #size];
                             if let Some(dt) = native.#native_name {
                                 let s = dt.format(#format).to_string();
                                 let b = s.as_bytes();
@@ -584,7 +591,7 @@ fn get_from_native_fields(
                 },
                 _ => quote! {
                     #field_name: {
-                        let mut bytes = [b' '; #size];
+                        let mut bytes = [#default_byte; #size];
                         if let Some(val) = &native.#native_name {
                             let s = val.to_string();
                             let b = s.as_bytes();
@@ -595,9 +602,9 @@ fn get_from_native_fields(
                 }
             }
         } else {
-            // Field without attributes, just fill with spaces
+            // Field without attributes, use default byte
             quote! {
-                #field_name: [b' '; #size]
+                #field_name: [#default_byte; #size]
             }
         }
     }).collect()
@@ -617,7 +624,7 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
     let from_native_fields_token = get_from_native_fields(&native_field_map);
 
     let gen = quote! {
-        #[derive(Debug, PartialEq, Serialize, Deserialize)]
+        #[derive(Debug, PartialEq, Serialize, Deserialize, Default)]
         pub struct #native_name {
             #(#native_fields_token,)*
         }

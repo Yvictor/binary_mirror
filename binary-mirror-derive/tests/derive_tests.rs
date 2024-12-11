@@ -64,6 +64,22 @@ fn test_with_datetime() {
     )));
 }
 
+#[derive(BinaryMirror)]
+struct WithDefaultByte {
+    #[bm(type = "str", default_byte = b'0')]
+    zero: [u8; 10],
+}
+
+#[test]
+fn test_with_default_byte() {
+    let default_ = WithDefaultByteNative {
+        zero: String::from("11"),
+    };
+    println!("{:?}", default_);
+    let raw = WithDefaultByte::from_native(&default_);
+    assert_eq!(raw.zero(), "1100000000");
+}
+
 #[test]
 fn test_struct_derivation() {
     let test = TestStruct {
@@ -294,6 +310,17 @@ fn test_struct_from_native() {
 
 }
 
+#[test]
+fn test_native_default() {
+    let native = TestStructNative::default();
+    assert_eq!(native.name, "");
+    assert_eq!(native.value, None);
+    assert_eq!(native.decimal, None);
+    assert_eq!(native.f32, None);
+    assert_eq!(native.exchange, "");
+    assert_eq!(native.datetime, None);
+    assert_eq!(native.side, None);
+}
 
 #[test]
 fn test_struct_to_bytes() {
