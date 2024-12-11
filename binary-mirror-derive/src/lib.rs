@@ -258,128 +258,191 @@ fn get_debug_fields(origin_fields: &[OriginField]) -> Vec<proc_macro2::TokenStre
 }
 
 fn get_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
-    native_fields
-        .iter()
-        .map(|field| {
-            let name = &field.name;
-            let origin_field = &field.origin_fields[0].name; // Get the Ident from OriginField
+    native_fields.iter().map(|field| {
+        let name = &field.name;
+        let origin_field = &field.origin_fields[0].name;
 
-            if field.is_combined_datetime {
-                let date_field = &field.origin_fields[0].name; // Get the Ident from OriginField
-                let time_field = &field.origin_fields[1].name; // Get the Ident from OriginField
-                let date_format = field.origin_fields[0]
-                    .attrs
-                    .as_ref()
-                    .and_then(|attrs| attrs.format.as_ref())
-                    .map(String::as_str)
-                    .unwrap_or("%Y%m%d");
-                let time_format = field.origin_fields[1]
-                    .attrs
-                    .as_ref()
-                    .and_then(|attrs| attrs.format.as_ref())
-                    .map(String::as_str)
-                    .unwrap_or("%H%M%S");
+        let debug_bytes = quote! {
+            let debug_content = format!(
+                "hex: [{}], bytes: \"{}\"",
+                self.#origin_field
+                    .iter()
+                    .map(|b| format!("0x{:02x}", b))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                self.#origin_field
+                    .iter()
+                    .map(|&b| {
+                        match b {
+                            0x0A => "\\n".to_string(),
+                            0x0D => "\\r".to_string(),
+                            0x09 => "\\t".to_string(),
+                            0x20..=0x7E => (b as char).to_string(),
+                            _ => format!("\\x{:02x}", b),
+                        }
+                    })
+                    .collect::<Vec<String>>()
+                    .join("")
+            );
+            tracing::warn!("Failed to parse {}: {}", stringify!(#name), debug_content);
+        };
 
-                quote! {
-                    pub fn #name(&self) -> Option<chrono::NaiveDateTime> {
-                        let date = chrono::NaiveDate::parse_from_str(
-                            String::from_utf8_lossy(&self.#date_field).trim(),
-                            #date_format
-                        ).ok()?;
-                        let time = chrono::NaiveTime::parse_from_str(
-                            String::from_utf8_lossy(&self.#time_field).trim(),
-                            #time_format
-                        ).ok()?;
-                        Some(chrono::NaiveDateTime::new(date, time))
-                    }
-                }
-            } else {
-                let attrs = field.origin_fields[0].attrs.as_ref().unwrap();
-                match attrs.type_name.as_str() {
-                    "str" => quote! {
-                        pub fn #name(&self) -> String {
-                            String::from_utf8_lossy(&self.#origin_field).trim().to_string()
+        if field.is_combined_datetime {
+            let date_field = &field.origin_fields[0].name;
+            let time_field = &field.origin_fields[1].name;
+            let date_format = field.origin_fields[0].attrs.as_ref()
+                .and_then(|attrs| attrs.format.as_ref())
+                .map(String::as_str)
+                .unwrap_or("%Y%m%d");
+            let time_format = field.origin_fields[1].attrs.as_ref()
+                .and_then(|attrs| attrs.format.as_ref())
+                .map(String::as_str)
+                .unwrap_or("%H%M%S");
+
+            quote! {
+                pub fn #name(&self) -> Option<chrono::NaiveDateTime> {
+                    let date = match chrono::NaiveDate::parse_from_str(
+                        String::from_utf8_lossy(&self.#date_field).trim(),
+                        #date_format
+                    ) {
+                        Ok(d) => d,
+                        Err(_) => {
+                            #debug_bytes
+                            return None;
                         }
-                    },
-                    "i32" | "i64" | "u32" | "u64" | "f32" | "f64" => {
-                        let type_ident = quote::format_ident!("{}", attrs.type_name);
-                        quote! {
-                            pub fn #name(&self) -> Option<#type_ident> {
-                                String::from_utf8_lossy(&self.#origin_field)
-                                    .trim()
-                                    .parse::<#type_ident>()
-                                    .ok()
-                            }
+                    };
+                    let time = match chrono::NaiveTime::parse_from_str(
+                        String::from_utf8_lossy(&self.#time_field).trim(),
+                        #time_format
+                    ) {
+                        Ok(t) => t,
+                        Err(_) => {
+                            #debug_bytes
+                            return None;
                         }
-                    }
-                    "decimal" => quote! {
-                        pub fn #name(&self) -> Option<rust_decimal::Decimal> {
-                            String::from_utf8_lossy(&self.#origin_field)
-                                .trim()
-                                .parse::<rust_decimal::Decimal>()
-                                .ok()
-                                .map(|d| { d.normalize() })
-                        }
-                    },
-                    "datetime" => {
-                        let format = attrs
-                            .format
-                            .as_ref()
-                            .map(String::as_str)
-                            .unwrap_or("%Y%m%d%H%M%S");
-                        quote! {
-                            pub fn #name(&self) -> Option<chrono::NaiveDateTime> {
-                                chrono::NaiveDateTime::parse_from_str(
-                                    String::from_utf8_lossy(&self.#origin_field).trim(),
-                                    #format
-                                ).ok()
-                            }
-                        }
-                    }
-                    "date" => {
-                        let format = attrs
-                            .format
-                            .as_ref()
-                            .map(String::as_str)
-                            .unwrap_or("%Y%m%d");
-                        quote! {
-                            pub fn #name(&self) -> Option<chrono::NaiveDate> {
-                                chrono::NaiveDate::parse_from_str(
-                                    String::from_utf8_lossy(&self.#origin_field).trim(),
-                                    #format
-                                ).ok()
-                            }
-                        }
-                    }
-                    "time" => {
-                        let format = attrs
-                            .format
-                            .as_ref()
-                            .map(String::as_str)
-                            .unwrap_or("%H%M%S");
-                        quote! {
-                            pub fn #name(&self) -> Option<chrono::NaiveTime> {
-                                chrono::NaiveTime::parse_from_str(
-                                    String::from_utf8_lossy(&self.#origin_field).trim(),
-                                    #format
-                                ).ok()
-                            }
-                        }
-                    }
-                    "enum" => {
-                        let enum_type = attrs.enum_type.as_ref().unwrap();
-                        let enum_ident = quote::format_ident!("{}", enum_type);
-                        quote! {
-                            pub fn #name(&self) -> Option<#enum_ident> {
-                                #enum_ident::from_bytes(&self.#origin_field)
-                            }
-                        }
-                    }
-                    _ => panic!("Unsupported type: {}", attrs.type_name),
+                    };
+                    Some(chrono::NaiveDateTime::new(date, time))
                 }
             }
-        })
-        .collect()
+        } else {
+            let attrs = field.origin_fields[0].attrs.as_ref().unwrap();
+            match attrs.type_name.as_str() {
+                "str" => quote! {
+                    pub fn #name(&self) -> String {
+                        String::from_utf8_lossy(&self.#origin_field).trim().to_string()
+                    }
+                },
+                "i32" | "i64" | "u32" | "u64" | "f32" | "f64" => {
+                    let type_ident = quote::format_ident!("{}", attrs.type_name);
+                    quote! {
+                        pub fn #name(&self) -> Option<#type_ident> {
+                            match String::from_utf8_lossy(&self.#origin_field)
+                                .trim()
+                                .parse::<#type_ident>() {
+                                    Ok(val) => Some(val),
+                                    Err(_) => {
+                                        #debug_bytes
+                                        None
+                                    }
+                                }
+                        }
+                    }
+                },
+                "decimal" => quote! {
+                    pub fn #name(&self) -> Option<rust_decimal::Decimal> {
+                        match String::from_utf8_lossy(&self.#origin_field)
+                            .trim()
+                            .parse::<rust_decimal::Decimal>() {
+                                Ok(d) => Some(d.normalize()),
+                                Err(_) => {
+                                    #debug_bytes
+                                    None
+                                }
+                            }
+                    }
+                },
+                "datetime" => {
+                    let format = attrs
+                        .format
+                        .as_ref()
+                        .map(String::as_str)
+                        .unwrap_or("%Y%m%d%H%M%S");
+                    quote! {
+                        pub fn #name(&self) -> Option<chrono::NaiveDateTime> {
+                            match chrono::NaiveDateTime::parse_from_str(
+                                String::from_utf8_lossy(&self.#origin_field).trim(),
+                                #format
+                            ) {
+                                Ok(dt) => Some(dt),
+                                Err(_) => {
+                                    #debug_bytes
+                                    None
+                                }
+                            }
+                        }
+                    }
+                },
+                "date" => {
+                    let format = attrs
+                        .format
+                        .as_ref()
+                        .map(String::as_str)
+                        .unwrap_or("%Y%m%d");
+                    quote! {
+                        pub fn #name(&self) -> Option<chrono::NaiveDate> {
+                            match chrono::NaiveDate::parse_from_str(
+                                String::from_utf8_lossy(&self.#origin_field).trim(),
+                                #format
+                            ) {
+                                Ok(d) => Some(d),
+                                Err(_) => {
+                                    #debug_bytes
+                                    None
+                                }
+                            }
+                        }
+                    }
+                },
+                "time" => {
+                    let format = attrs
+                        .format
+                        .as_ref()
+                        .map(String::as_str)
+                        .unwrap_or("%H%M%S");
+                    quote! {
+                        pub fn #name(&self) -> Option<chrono::NaiveTime> {
+                            match chrono::NaiveTime::parse_from_str(
+                                String::from_utf8_lossy(&self.#origin_field).trim(),
+                                #format
+                            ) {
+                                Ok(t) => Some(t),
+                                Err(_) => {
+                                    #debug_bytes
+                                    None
+                                }
+                            }
+                        }
+                    }
+                },
+                "enum" => {
+                    let enum_type = attrs.enum_type.as_ref().unwrap();
+                    let enum_ident = quote::format_ident!("{}", enum_type);
+                    quote! {
+                        pub fn #name(&self) -> Option<#enum_ident> {
+                            match #enum_ident::from_bytes(&self.#origin_field) {
+                                Some(v) => Some(v),
+                                None => {
+                                    #debug_bytes
+                                    None
+                                }
+                            }
+                        }
+                    }
+                },
+                _ => quote! {}
+            }
+        }
+    }).collect()
 }
 
 fn get_display_fields(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
