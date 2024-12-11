@@ -164,9 +164,9 @@ fn test_display_format() {
     };
 
     // Will print:
-    // TestStruct TestStruct { name: Test, value: Error<hex: [61, 62, 63, 00], bytes: "abc\x00">, decimal: Error<hex: [30, 30, 30, 30, 30, 30, 31, 32, 33, 2e, 78, 78, 78, 78, 78, 78, 78, 78, 78, 78], bytes: "000000123.xxxxxxxxxx">, f32: Error<hex: [31, 32, 33, 2e, 78], bytes: "123.x">, exchange: CME, datetime: Error<hex: [78, 78, 78, 78, 78, 78, 78, 78], bytes: "xxxxxxxx">, side: Error<hex: [20], bytes: " "> }
+    // TestStruct { name: Test, value: Error<hex: [0x61, 0x62, 0x63, 0x00], bytes: "abc\x00">, decimal: Error<hex: [0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x31, 0x32, 0x33, 0x2e, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78], bytes: "000000123.xxxxxxxxxx">, f32: Error<hex: [0x31, 0x32, 0x33, 0x2e, 0x78], bytes: "123.x">, exchange: CME, datetime: Error<hex: [0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78], bytes: "xxxxxxxx">, side: Error<hex: [0x20], bytes: " "> }
     println!("{}", invalid);
-    assert_eq!(format!("{}", invalid), "TestStruct { name: Test, value: Error<hex: [61, 62, 63, 00], bytes: \"abc\\x00\">, decimal: Error<hex: [30, 30, 30, 30, 30, 30, 31, 32, 33, 2e, 78, 78, 78, 78, 78, 78, 78, 78, 78, 78], bytes: \"000000123.xxxxxxxxxx\">, f32: Error<hex: [31, 32, 33, 2e, 78], bytes: \"123.x\">, exchange: CME, datetime: Error<hex: [78, 78, 78, 78, 78, 78, 78, 78], bytes: \"xxxxxxxx\">, side: Error<hex: [20], bytes: \" \"> }");
+    assert_eq!(format!("{}", invalid), "TestStruct { name: Test, value: Error<hex: [0x61, 0x62, 0x63, 0x00], bytes: \"abc\\x00\">, decimal: Error<hex: [0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x31, 0x32, 0x33, 0x2e, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78], bytes: \"000000123.xxxxxxxxxx\">, f32: Error<hex: [0x31, 0x32, 0x33, 0x2e, 0x78], bytes: \"123.x\">, exchange: CME, datetime: Error<hex: [0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78], bytes: \"xxxxxxxx\">, side: Error<hex: [0x20], bytes: \" \"> }");
 }
 
 #[test]

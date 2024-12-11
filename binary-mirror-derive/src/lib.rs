@@ -272,30 +272,6 @@ fn get_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
                     .unwrap_or("%H%M%S");
 
                 quote! {
-                    pub fn #name(&self) -> Option<chrono::NaiveDateTime> {
-                        let date = match chrono::NaiveDate::parse_from_str(
-                            String::from_utf8_lossy(&self.#date_field).trim(),
-                            #date_format
-                        ) {
-                            Ok(d) => d,
-                            Err(_) => {
-                                #debug_bytes
-                                return None;
-                            }
-                        };
-                        let time = match chrono::NaiveTime::parse_from_str(
-                            String::from_utf8_lossy(&self.#time_field).trim(),
-                            #time_format
-                        ) {
-                            Ok(t) => t,
-                            Err(_) => {
-                                #debug_bytes
-                                return None;
-                            }
-                        };
-                        Some(chrono::NaiveDateTime::new(date, time))
-                    }
-
                     pub fn #display_method_name(&self) -> Option<chrono::NaiveDateTime> {
                         let date = chrono::NaiveDate::parse_from_str(
                             String::from_utf8_lossy(&self.#date_field).trim(),
@@ -307,54 +283,51 @@ fn get_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
                         ).ok()?;
                         Some(chrono::NaiveDateTime::new(date, time))
                     }
+
+                    pub fn #name(&self) -> Option<chrono::NaiveDateTime> {
+                        match self.#display_method_name() {
+                            Some(dt) => Some(dt),
+                            None => {
+                                #debug_bytes
+                                return None;
+                            }
+                        }
+                    }
                 }
             } else {
                 let attrs = field.origin_fields[0].attrs.as_ref().unwrap();
                 match attrs.type_name.as_str() {
                     "str" => quote! {
-                        pub fn #name(&self) -> String {
-                            String::from_utf8_lossy(&self.#origin_field).trim().to_string()
-                        }
-
                         pub fn #display_method_name(&self) -> String {
+                            String::from_utf8_lossy(&self.#origin_field).trim().to_string()
+                        } 
+
+                        pub fn #name(&self) -> String {
                             String::from_utf8_lossy(&self.#origin_field).trim().to_string()
                         }
                     },
                     "i32" | "i64" | "u32" | "u64" | "f32" | "f64" => {
                         let type_ident = quote::format_ident!("{}", attrs.type_name);
                         quote! {
-                            pub fn #name(&self) -> Option<#type_ident> {
-                                match String::from_utf8_lossy(&self.#origin_field)
-                                    .trim()
-                                    .parse::<#type_ident>() {
-                                        Ok(val) => Some(val),
-                                        Err(_) => {
-                                            #debug_bytes
-                                            None
-                                        }
-                                    }
-                            }
-
                             pub fn #display_method_name(&self) -> Option<#type_ident> {
                                 String::from_utf8_lossy(&self.#origin_field)
                                     .trim()
                                     .parse::<#type_ident>()
                                     .ok()
                             }
-                        }
-                    }
-                    "decimal" => quote! {
-                        pub fn #name(&self) -> Option<rust_decimal::Decimal> {
-                            match String::from_utf8_lossy(&self.#origin_field)
-                                .trim()
-                                .parse::<rust_decimal::Decimal>() {
-                                    Ok(d) => Some(d.normalize()),
-                                    Err(_) => {
+
+                            pub fn #name(&self) -> Option<#type_ident> {
+                                match self.#display_method_name() {
+                                    Some(val) => Some(val),
+                                    None => {
                                         #debug_bytes
                                         None
                                     }
                                 }
+                            }
                         }
+                    }
+                    "decimal" => quote! {
                         pub fn #display_method_name(&self) -> Option<rust_decimal::Decimal> {
                             String::from_utf8_lossy(&self.#origin_field)
                                 .trim()
@@ -362,6 +335,16 @@ fn get_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
                                 .ok()
                                 .map(|d| d.normalize())
                         }
+                        pub fn #name(&self) -> Option<rust_decimal::Decimal> {
+                            match self.#display_method_name() {
+                                Some(d) => Some(d),
+                                None => {
+                                    #debug_bytes
+                                    None
+                                }
+                            }
+                        }
+
                     },
                     "datetime" => {
                         let format = attrs
@@ -370,25 +353,24 @@ fn get_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
                             .map(String::as_str)
                             .unwrap_or("%Y%m%d%H%M%S");
                         quote! {
-                            pub fn #name(&self) -> Option<chrono::NaiveDateTime> {
-                                match chrono::NaiveDateTime::parse_from_str(
+                            pub fn #display_method_name(&self) -> Option<chrono::NaiveDateTime> {
+                                chrono::NaiveDateTime::parse_from_str(
                                     String::from_utf8_lossy(&self.#origin_field).trim(),
                                     #format
-                                ) {
-                                    Ok(dt) => Some(dt),
-                                    Err(_) => {
+                                ).ok()
+                            }
+
+                            pub fn #name(&self) -> Option<chrono::NaiveDateTime> {
+                                match self.#display_method_name() {
+                                    Some(dt) => Some(dt),
+                                    None => {
                                         #debug_bytes
                                         None
                                     }
                                 }
                             }
 
-                            pub fn #display_method_name(&self) -> Option<chrono::NaiveDateTime> {
-                                String::from_utf8_lossy(&self.#origin_field)
-                                    .trim()
-                                    .parse::<chrono::NaiveDateTime>()
-                                    .ok()
-                            }
+
                         }
                     }
                     "date" => {
@@ -398,19 +380,6 @@ fn get_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
                             .map(String::as_str)
                             .unwrap_or("%Y%m%d");
                         quote! {
-                            pub fn #name(&self) -> Option<chrono::NaiveDate> {
-                                match chrono::NaiveDate::parse_from_str(
-                                    String::from_utf8_lossy(&self.#origin_field).trim(),
-                                    #format
-                                ) {
-                                    Ok(d) => Some(d),
-                                    Err(_) => {
-                                        #debug_bytes
-                                        None
-                                    }
-                                }
-                            }
-
                             pub fn #display_method_name(&self) -> Option<chrono::NaiveDate> {
                                 chrono::NaiveDate::parse_from_str(
                                     String::from_utf8_lossy(&self.#origin_field).trim(),
@@ -418,6 +387,17 @@ fn get_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
                                 )
                                 .ok()
                             }
+                            pub fn #name(&self) -> Option<chrono::NaiveDate> {
+                                match self.#display_method_name() {
+                                    Some(d) => Some(d),
+                                    None => {
+                                        #debug_bytes
+                                        None
+                                    }
+                                }
+                            }
+
+
                         }
                     }
                     "time" => {
@@ -427,19 +407,6 @@ fn get_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
                             .map(String::as_str)
                             .unwrap_or("%H%M%S");
                         quote! {
-                            pub fn #name(&self) -> Option<chrono::NaiveTime> {
-                                match chrono::NaiveTime::parse_from_str(
-                                    String::from_utf8_lossy(&self.#origin_field).trim(),
-                                    #format
-                                ) {
-                                    Ok(t) => Some(t),
-                                    Err(_) => {
-                                        #debug_bytes
-                                        None
-                                    }
-                                }
-                            }
-
                             pub fn #display_method_name(&self) -> Option<chrono::NaiveTime> {
                                 chrono::NaiveTime::parse_from_str(
                                     String::from_utf8_lossy(&self.#origin_field).trim(),
@@ -452,14 +419,27 @@ fn get_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
                                     }
                                 }
                             }
+                            pub fn #name(&self) -> Option<chrono::NaiveTime> {
+                                match self.#display_method_name() {
+                                    Some(t) => Some(t),
+                                    None => {
+                                        #debug_bytes
+                                        None
+                                    }
+                                }
+                            }
                         }
                     }
                     "enum" => {
                         let enum_type = attrs.enum_type.as_ref().unwrap();
                         let enum_ident = quote::format_ident!("{}", enum_type);
                         quote! {
+                            pub fn #display_method_name(&self) -> Option<#enum_ident> {
+                                #enum_ident::from_bytes(&self.#origin_field)
+                            }
+
                             pub fn #name(&self) -> Option<#enum_ident> {
-                                match #enum_ident::from_bytes(&self.#origin_field) {
+                                match self.#display_method_name() {
                                     Some(v) => Some(v),
                                     None => {
                                         #debug_bytes
@@ -468,9 +448,6 @@ fn get_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
                                 }
                             }
 
-                            pub fn #display_method_name(&self) -> Option<#enum_ident> {
-                                #enum_ident::from_bytes(&self.#origin_field)
-                            }
                         }
                     }
                     _ => panic!("Unsupported type: {}", attrs.type_name),
@@ -498,7 +475,8 @@ fn get_display_fields(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenSt
                 "str" => quote! {
                     write!(f, "{}: {}", stringify!(#name), self.#method_name())?;
                 },
-                "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "decimal" | "datetime" | "date" | "time" => quote! {
+                "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "decimal" | "datetime" | "date"
+                | "time" => quote! {
                     match self.#method_name() {
                         Some(val) => write!(f, "{}: {}", stringify!(#name), val)?,
                         None => write!(f, "{}: Error<hex: [{}], bytes: \"{}\">",

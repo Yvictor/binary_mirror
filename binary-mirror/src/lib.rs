@@ -30,7 +30,7 @@ impl BytesSizeError {
 }
 
 pub fn to_hex_repr(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(", ")
+    bytes.iter().map(|b| format!("0x{:02x}", b)).collect::<Vec<_>>().join(", ")
 }
 
 pub fn to_bytes_repr(bytes: &[u8]) -> String {
