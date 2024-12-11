@@ -23,6 +23,7 @@ struct FieldAttrs {
     skip: bool,
     enum_type: Option<String>,
     default_byte: Option<u8>,
+    ignore_warn: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -57,6 +58,7 @@ fn get_field_attrs(attrs: &[syn::Attribute]) -> Option<FieldAttrs> {
                 skip: false,
                 enum_type: None,
                 default_byte: None,
+                ignore_warn: false,
             };
 
             let _ = attr.parse_nested_meta(|meta| {
@@ -80,7 +82,9 @@ fn get_field_attrs(attrs: &[syn::Attribute]) -> Option<FieldAttrs> {
                 } else if meta.path.is_ident("default_byte") {                    
                     let lit = meta.value()?.parse::<syn::LitByte>()?;
                     field_attrs.default_byte = Some(lit.value());
-                } 
+                } else if meta.path.is_ident("ignore_warn") {
+                    field_attrs.ignore_warn = meta.value()?.parse::<syn::LitBool>()?.value();
+                }  
                 Ok(())
             });
 
@@ -477,9 +481,8 @@ fn get_display_fields(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenSt
                 | "time" => quote! {
                     match self.#method_name() {
                         Some(val) => write!(f, "{}: {}", stringify!(#name), val)?,
-                        None => write!(f, "{}: Error<hex: [{}], bytes: \"{}\">",
+                        None => write!(f, "{}: Error<bytes: \"{}\">",
                             stringify!(#name),
-                            binary_mirror::to_hex_repr(&self.#origin_field),
                             binary_mirror::to_bytes_repr(&self.#origin_field)
                         )?,
                     }
@@ -487,9 +490,8 @@ fn get_display_fields(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenSt
                 "enum" => quote! {
                     match self.#method_name() {
                         Some(val) => write!(f, "{}: {:?}", stringify!(#name), val)?,
-                        None => write!(f, "{}: Error<hex: [{}], bytes: \"{}\">",
+                        None => write!(f, "{}: Error<bytes: \"{}\">",
                             stringify!(#name),
-                            binary_mirror::to_hex_repr(&self.#origin_field),
                             binary_mirror::to_bytes_repr(&self.#origin_field)
                         )?,
                     }
@@ -515,14 +517,19 @@ fn get_native_fields_token(native_fields: &[NativeField]) -> Vec<proc_macro2::To
 }
 
 fn get_to_native_fields(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
-    native_fields
-        .iter()
-        .map(|field| {
-            let name = &field.name;
+    native_fields.iter().map(|field| {
+        let name = &field.name;
+        let ignore_warn = field.origin_fields[0].attrs.as_ref()
+            .map(|attrs| attrs.ignore_warn)
+            .unwrap_or(false);
+
+        if ignore_warn {
+            quote! { #name: self.#name() }
+        } else {
             let method_name = quote::format_ident!("{}_with_warn", name);
             quote! { #name: self.#method_name() }
-        })
-        .collect()
+        }
+    }).collect()
 }
 
 fn get_from_native_fields(native_field_map: &[NativeField2OriginFieldMap]) -> Vec<proc_macro2::TokenStream> {

@@ -180,9 +180,9 @@ fn test_display_format() {
     };
 
     // Will print:
-    // TestStruct { name: Test, value: Error<hex: [0x61, 0x62, 0x63, 0x00], bytes: "abc\x00">, decimal: Error<hex: [0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x31, 0x32, 0x33, 0x2e, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78], bytes: "000000123.xxxxxxxxxx">, f32: Error<hex: [0x31, 0x32, 0x33, 0x2e, 0x78], bytes: "123.x">, exchange: CME, datetime: Error<hex: [0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78], bytes: "xxxxxxxx">, side: Error<hex: [0x20], bytes: " "> }
+    //TestStruct { name: Test, value: Error<bytes: "abc\x00">, decimal: Error<bytes: "000000123.xxxxxxxxxx">, f32: Error<bytes: "123.x">, exchange: CME, datetime: Error<bytes: "xxxxxxxx">, side: Error<bytes: " "> }
     println!("{}", invalid);
-    assert_eq!(format!("{}", invalid), "TestStruct { name: Test, value: Error<hex: [0x61, 0x62, 0x63, 0x00], bytes: \"abc\\x00\">, decimal: Error<hex: [0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x31, 0x32, 0x33, 0x2e, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78], bytes: \"000000123.xxxxxxxxxx\">, f32: Error<hex: [0x31, 0x32, 0x33, 0x2e, 0x78], bytes: \"123.x\">, exchange: CME, datetime: Error<hex: [0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78], bytes: \"xxxxxxxx\">, side: Error<hex: [0x20], bytes: \" \"> }");
+    assert_eq!(format!("{}", invalid), "TestStruct { name: Test, value: Error<bytes: \"abc\\x00\">, decimal: Error<bytes: \"000000123.xxxxxxxxxx\">, f32: Error<bytes: \"123.x\">, exchange: CME, datetime: Error<bytes: \"xxxxxxxx\">, side: Error<bytes: \" \"> }");
 }
 
 #[test]
@@ -378,4 +378,25 @@ fn test_binary_enum_roundtrip() {
     
     let down = Direction::from_bytes(b"D").unwrap();
     assert_eq!(Direction::from_bytes(down.as_bytes()), Some(Direction::Down));
+}
+
+#[repr(C)]
+#[derive(BinaryMirror)]
+struct WithIgnoreWarn {
+    #[bm(type = "str")]
+    name: [u8; 10],
+    #[bm(type = "i32", ignore_warn = true)]
+    value: [u8; 4],
+}
+
+#[test]
+fn test_ignore_warn() {
+    let test = WithIgnoreWarn {
+        name: *b"Hello     ",
+        value: *b"abc ",  // Invalid value
+    };
+    
+    let native = test.to_native();
+    // No warning will be logged for value field
+    assert_eq!(native.value, None);
 }
