@@ -192,6 +192,10 @@ fn get_native_fields_and_map(
                 _ => {
                     let (ty, pure_ty) = match attrs.type_name.as_str() {
                         "str" => (quote!(String), quote!(String)),
+                        "bytes" => {
+                            let size = field.size;
+                            (quote!([u8; #size]), quote!([u8; #size]))
+                        },
                         "i32" | "i64" | "u32" | "u64" | "f32" | "f64" => {
                             let type_ident = quote::format_ident!("{}", attrs.type_name);
                             (quote!(Option<#type_ident>), quote!(#type_ident))
@@ -319,6 +323,18 @@ fn get_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
 
                         pub fn #method_with_warn_name(&self) -> String {
                             String::from_utf8_lossy(&self.#origin_field).trim().to_string()
+                        }
+                    },
+                    "bytes" => {
+                        let size = field.origin_fields[0].size;
+                        quote! {
+                            pub fn #name(&self) -> [u8; #size] {
+                                self.#origin_field
+                            }
+
+                            pub fn #method_with_warn_name(&self) -> [u8; #size] {
+                                self.#origin_field
+                            }
                         }
                     },
                     "i32" | "i64" | "u32" | "u64" | "f32" | "f64" => {
@@ -630,6 +646,9 @@ fn get_from_native_fields(native_field_map: &[NativeField2OriginFieldMap]) -> Ve
                             }
                         }
                     }
+                },
+                "bytes" => quote! {
+                    #field_name: native.#native_name
                 },
                 _ => quote! {
                     #field_name: {

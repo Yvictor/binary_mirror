@@ -80,6 +80,32 @@ fn test_with_default_byte() {
     assert_eq!(raw.zero(), "1100000000");
 }
 
+#[repr(C)]
+#[derive(BinaryMirror)]
+struct WithDefaultBytes {
+    #[bm(type = "str", default_byte = b'\x08')]  // 0x08 hex
+    hex: [u8; 5],
+    #[bm(type = "str", default_byte = b'\x00')]  // Null in hex
+    null: [u8; 5],
+    #[bm(type = "str", default_byte = b'0')]  // Regular byte literal
+    zero: [u8; 5],
+}
+
+#[test]
+fn test_default_bytes() {
+    let native = WithDefaultBytesNative::default()
+        .with_hex("abc")
+        .with_null("abc")
+        .with_zero("abc");
+
+    let binary = WithDefaultBytes::from_native(&native);
+    
+    assert_eq!(&binary.hex, b"abc\x08\x08");  // Padded with spaces (0x08)
+    assert_eq!(&binary.null, b"abc\x00\x00");  // Padded with nulls (0x00)
+    assert_eq!(&binary.zero, b"abc00");  // Padded with '0' chars
+}
+
+
 #[test]
 fn test_struct_derivation() {
     let test = TestStruct {
@@ -478,3 +504,43 @@ fn test_number_format() {
     assert_eq!(&binary.decimal, b"000123.450");
     assert_eq!(&binary.decimal_with_neg, b"-00123.450");
 }
+
+#[repr(C)]
+#[derive(BinaryMirror)]
+struct WithBytes {
+    #[bm(type = "bytes")]
+    raw: [u8; 10],
+    #[bm(type = "bytes", default_byte = b'0')]
+    padded: [u8; 5],
+}
+
+#[test]
+fn test_bytes() {
+    let native = WithBytesNative::default()
+        .with_raw([1, 2, 3, 4, 5, b' ', b' ', b' ', b' ', b' '])
+        .with_padded([0xFF, 0xFE, b'0', b'0', b'0']);
+
+    let binary = WithBytes::from_native(&native);
+    assert_eq!(binary.raw(), [1, 2, 3, 4, 5, b' ', b' ', b' ', b' ', b' ']);
+    assert_eq!(binary.padded(), [0xFF, 0xFE, b'0', b'0', b'0']);
+
+    // Test raw bytes format
+    assert_eq!(&binary.raw, &[1, 2, 3, 4, 5, b' ', b' ', b' ', b' ', b' ']);
+    assert_eq!(&binary.padded, &[0xFF, 0xFE, b'0', b'0', b'0']);
+}
+
+#[test]
+fn test_bytes_serde() {
+    let native = WithBytesNative {
+        raw: [1, 2, 3, b' ', b' ', b' ', b' ', b' ', b' ', b' '],
+        padded: [0xFF, 0xFE, b'0', b'0', b'0'],
+    };
+
+    let json = serde_json::to_string(&native).unwrap();
+    assert_eq!(json, r#"{"raw":[1,2,3,32,32,32,32,32,32,32],"padded":[255,254,48,48,48]}"#);
+
+    let parsed: WithBytesNative = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed.raw, [1, 2, 3, b' ', b' ', b' ', b' ', b' ', b' ', b' ']);
+    assert_eq!(parsed.padded, [0xFF, 0xFE, b'0', b'0', b'0']);
+}
+
