@@ -544,3 +544,31 @@ fn test_bytes_serde() {
     assert_eq!(parsed.padded, [0xFF, 0xFE, b'0', b'0', b'0']);
 }
 
+#[test]
+fn test_field_specs() {
+    let name_spec = TestStruct::name_spec();
+    assert_eq!(name_spec.offset, 0);
+    assert_eq!(name_spec.limit, 10);
+    assert_eq!(name_spec.size, 10);
+
+    let value_spec = TestStruct::value_spec();
+    assert_eq!(value_spec.offset, 10);
+    assert_eq!(value_spec.limit, 14);
+    assert_eq!(value_spec.size, 4);
+
+    // Test field access using spec
+    let bytes = b"Hello     123 no_type000000123.4500000000123.4CME       20240101123456B";
+    let _test = TestStruct::from_bytes(bytes).unwrap();
+    
+    // Get field slices using spec
+    let spec = TestStruct::name_spec();
+    assert_eq!(&bytes[spec.offset..spec.limit], b"Hello     ");
+    
+    let spec = TestStruct::decimal_spec();
+    assert_eq!(&bytes[spec.offset..spec.limit], b"000000123.4500000000");
+
+    // Test field boundaries
+    assert_eq!(TestStruct::name_spec().limit, TestStruct::value_spec().offset);
+    assert_eq!(TestStruct::value_spec().limit, TestStruct::no_type_spec().offset);
+}
+

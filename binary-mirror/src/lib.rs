@@ -45,6 +45,13 @@ pub fn to_bytes_repr(bytes: &[u8]) -> String {
     }).collect::<Vec<String>>().join("")
 }
 
+#[derive(Debug, Clone)]
+pub struct FieldSpec {
+    pub offset: usize,
+    pub limit: usize,
+    pub size: usize,
+}
+
 
 // pub mod strp {
 

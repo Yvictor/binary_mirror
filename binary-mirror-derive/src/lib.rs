@@ -49,6 +49,7 @@ struct NativeField2OriginFieldMap {
     native_field: Option<NativeField>,
 }
 
+
 fn get_field_attrs(attrs: &[syn::Attribute]) -> Option<FieldAttrs> {
     for attr in attrs {
         if attr.path().is_ident("bm") {
@@ -704,6 +705,32 @@ fn get_native_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenSt
     }).collect()
 }
 
+fn get_field_spec_methods(origin_fields: &[OriginField]) -> proc_macro2::TokenStream {
+    let mut cumulative_size = 0;
+    let size_methods = origin_fields.iter().map(|field| {
+        let field_name = &field.name;
+        let field_size = field.size;
+        let offset = cumulative_size;
+        let limit = offset + field_size;
+        cumulative_size = limit;
+        let method_name = quote::format_ident!("{}_spec", field_name);
+        
+        quote! {
+            pub fn #method_name() -> binary_mirror::FieldSpec {
+                binary_mirror::FieldSpec {
+                    offset: #offset,
+                    limit: #limit,
+                    size: #field_size,
+                }
+            }
+        }
+    });
+
+    quote! {
+        #(#size_methods)*
+    }
+}
+
 fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
     let name = &input.ident;
     let native_name = quote::format_ident!("{}Native", name);
@@ -717,6 +744,7 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
     let to_native_fields_token = get_to_native_fields(&native_fields);
     let from_native_fields_token = get_from_native_fields(&native_field_map);
     let native_methods = get_native_methods(&native_fields);
+    let field_spec_methods = get_field_spec_methods(&origin_fields);
 
     let gen = quote! {
         #[derive(Debug, PartialEq, Serialize, Deserialize, Default)]
@@ -796,6 +824,9 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
                     #(#from_native_fields_token,)*
                 }
             }
+
+            #field_spec_methods
+
         }
 
         impl std::fmt::Debug for #name {
