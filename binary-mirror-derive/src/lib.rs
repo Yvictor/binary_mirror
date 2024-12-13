@@ -857,16 +857,14 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
     gen.into()
 }
 
-fn get_variant_value(attrs: &[syn::Attribute]) -> Option<u8> {
+fn get_variant_value(attrs: &[syn::Attribute]) -> Option<Vec<u8>> {
     for attr in attrs {
         if attr.path().is_ident("bv") {
             let mut byte_value = None;
             let _ = attr.parse_nested_meta(|meta| {
                 if meta.path.is_ident("value") {
                     let lit = meta.value()?.parse::<syn::LitByteStr>()?;
-                    if let Some(&value) = lit.value().first() {
-                        byte_value = Some(value);
-                    }
+                    byte_value = Some(lit.value().to_vec());
                 }
                 Ok(())
             });
@@ -888,11 +886,14 @@ fn impl_binary_enum(input: &DeriveInput) -> TokenStream {
         let variant_ident = &variant.ident;
         let byte_value = get_variant_value(&variant.attrs).unwrap_or_else(|| {
             let variant_str = variant_ident.to_string().to_uppercase();
-            variant_str.chars().next().unwrap() as u8
+            vec![variant_str.chars().next().unwrap() as u8]
         });
+        let byte_len = byte_value.len();
 
         quote! {
-            Some(#byte_value) => Some(Self::#variant_ident),
+            if bytes.len() >= #byte_len && &bytes[..#byte_len] == &[#(#byte_value),*] {
+                Some(Self::#variant_ident)
+            } else
         }
     });
 
@@ -900,20 +901,19 @@ fn impl_binary_enum(input: &DeriveInput) -> TokenStream {
         let variant_ident = &variant.ident;
         let byte_value = get_variant_value(&variant.attrs).unwrap_or_else(|| {
             let variant_str = variant_ident.to_string().to_uppercase();
-            variant_str.chars().next().unwrap() as u8
+            vec![variant_str.chars().next().unwrap() as u8]
         });
 
         quote! {
-            Self::#variant_ident => &[#byte_value],
+            Self::#variant_ident => &[#(#byte_value),*],
         }
     });
 
     let gen = quote! {
         impl #name {
             pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-                match bytes.get(0) {
-                    #(#match_arms_from)*
-                    _ => None,
+                #(#match_arms_from)* {
+                    None
                 }
             }
 

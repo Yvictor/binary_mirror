@@ -17,6 +17,15 @@ enum Direction {
     Down, // Will use b'D'
 }
 
+#[derive(Debug, PartialEq, BinaryEnum, Serialize, Deserialize)]
+enum OrderType {
+    #[bv(value = b"MKT")]
+    Market,
+    #[bv(value = b"LMT")]
+    Limit,
+}
+
+
 #[repr(C)]
 #[derive(BinaryMirror)]
 struct TestStruct {
@@ -570,5 +579,38 @@ fn test_field_specs() {
     // Test field boundaries
     assert_eq!(TestStruct::name_spec().limit, TestStruct::value_spec().offset);
     assert_eq!(TestStruct::value_spec().limit, TestStruct::no_type_spec().offset);
+}
+
+#[test]
+fn test_multi_byte_enum() {
+    // Test multi-byte values
+    assert_eq!(OrderType::from_bytes(b"MKT"), Some(OrderType::Market));
+    assert_eq!(OrderType::from_bytes(b"LMT"), Some(OrderType::Limit));
+    assert_eq!(OrderType::from_bytes(b"XXX"), None);
+
+    // Test roundtrip
+    let market = OrderType::Market;
+    assert_eq!(market.as_bytes(), b"MKT");
+    assert_eq!(OrderType::from_bytes(market.as_bytes()), Some(OrderType::Market));
+
+    let limit = OrderType::Limit;
+    assert_eq!(limit.as_bytes(), b"LMT");
+    assert_eq!(OrderType::from_bytes(limit.as_bytes()), Some(OrderType::Limit));
+
+    // Test in struct
+    #[repr(C)]
+    #[derive(BinaryMirror)]
+    struct Order {
+        #[bm(type = "enum", enum_type = "OrderType")]
+        order_type: [u8; 3],
+    }
+
+    let order = Order {
+        order_type: *b"MKT",
+    };
+
+    assert_eq!(order.order_type(), Some(OrderType::Market));
+    let native = order.to_native();
+    assert_eq!(native.order_type, Some(OrderType::Market));
 }
 
