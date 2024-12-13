@@ -1,3 +1,5 @@
+use std::default;
+
 use binary_mirror_derive::{BinaryEnum, BinaryMirror};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use rust_decimal::prelude::*;
@@ -612,5 +614,59 @@ fn test_multi_byte_enum() {
     assert_eq!(order.order_type(), Some(OrderType::Market));
     let native = order.to_native();
     assert_eq!(native.order_type, Some(OrderType::Market));
+}
+
+fn default_i32() -> i32 {
+    42
+}
+
+fn default_str() -> String {
+    "UNKNOWN".to_string()
+}
+
+
+#[repr(C)]
+#[derive(BinaryMirror)]
+struct WithDefaults {
+    #[bm(type = "str", default_func = "default_str")]
+    name: [u8; 10],
+    #[bm(type = "i32", default_func = "default_i32")]
+    value: [u8; 4],
+    // #[bm(type = "f32", default = 3.14)]
+    // price: [u8; 6],
+    // #[bm(type = "decimal", default = "123.45")]
+    // amount: [u8; 10],
+    // #[bm(type = "enum", enum_type = "OrderType", default = OrderType::Market)]
+    // order_type: [u8; 3],
+    // #[bm(type = "datetime", default = {chrono::Utc::now()})]
+    // timestamp: [u8; 14],
+}
+
+#[test]
+fn test_defaults() {
+    let native = WithDefaultsNative::default();
+    let binary = WithDefaults::from_native(&native);
+
+    assert_eq!(binary.name(), "UNKNOWN");
+    assert_eq!(binary.value(), Some(42));
+    // assert_eq!(binary.price(), Some(3.14));
+    // assert_eq!(binary.amount(), Some(Decimal::from_str("123.45").unwrap()));
+    // assert_eq!(binary.order_type(), Some(OrderType::Market));
+    // assert!(binary.timestamp().is_some()); // Current time
+
+    // // Test overriding defaults
+    // let native = WithDefaultsNative::default()
+    //     .with_name("TEST")
+    //     .with_value(100)
+    //     .with_price(99.99)
+    //     .with_amount(Decimal::from_str("999.99").unwrap())
+    //     .with_order_type(OrderType::Limit);
+
+    // let binary = WithDefaults::from_native(&native);
+    // assert_eq!(binary.name(), "TEST");
+    // assert_eq!(binary.value(), Some(100));
+    // assert_eq!(binary.price(), Some(99.99));
+    // assert_eq!(binary.amount(), Some(Decimal::from_str("999.99").unwrap()));
+    // assert_eq!(binary.order_type(), Some(OrderType::Limit));
 }
 

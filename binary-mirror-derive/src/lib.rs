@@ -24,6 +24,7 @@ struct FieldAttrs {
     enum_type: Option<String>,
     default_byte: Option<u8>,
     ignore_warn: bool,
+    default_func: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -39,8 +40,9 @@ struct NativeField {
     ty: proc_macro2::TokenStream,
     type_name: String,
     pure_ty: proc_macro2::TokenStream,
-    origin_fields: Vec<OriginField>, // Store the complete OriginField for reference
+    origin_fields: Vec<OriginField>,
     is_combined_datetime: bool,
+    default_func: Option<String>,
 }
 
 #[derive(Debug)]
@@ -62,6 +64,7 @@ fn get_field_attrs(attrs: &[syn::Attribute]) -> Option<FieldAttrs> {
                 enum_type: None,
                 default_byte: None,
                 ignore_warn: false,
+                default_func: None,
             };
 
             let _ = attr.parse_nested_meta(|meta| {
@@ -87,7 +90,10 @@ fn get_field_attrs(attrs: &[syn::Attribute]) -> Option<FieldAttrs> {
                     field_attrs.default_byte = Some(lit.value());
                 } else if meta.path.is_ident("ignore_warn") {
                     field_attrs.ignore_warn = meta.value()?.parse::<syn::LitBool>()?.value();
-                }  
+                } else if meta.path.is_ident("default_func") {
+                    let lit = meta.value()?.parse::<syn::LitStr>()?;
+                    field_attrs.default_func = Some(lit.value());
+                }
                 Ok(())
             });
 
@@ -179,6 +185,7 @@ fn get_native_fields_and_map(
                         pure_ty: quote!(chrono::NaiveDateTime),
                         origin_fields: vec![field.clone(), time_field.clone()],
                         is_combined_datetime: true,
+                        default_func: attrs.default_func.clone(),
                     };
                     native_fields.push(native_field.clone());
                     native_field_map.push(NativeField2OriginFieldMap {
@@ -224,6 +231,7 @@ fn get_native_fields_and_map(
                         pure_ty,
                         origin_fields: vec![field.clone()],
                         is_combined_datetime: false,
+                        default_func: attrs.default_func.clone(),
                     };
 
                     native_fields.push(native_field.clone());
@@ -627,7 +635,6 @@ fn get_from_native_fields(native_field_map: &[NativeField2OriginFieldMap]) -> Ve
                                 let mut bytes = [#default_byte; #size];
                                 if let Some(val) = &native.#native_name {
                                     let s = format!(#fmt, val);
-                                    println!("{}", #fmt);
                                     let b = s.as_bytes();
                                     bytes[..b.len().min(#size)].copy_from_slice(&b[..b.len().min(#size)]);
                                 }
@@ -731,6 +738,43 @@ fn get_field_spec_methods(origin_fields: &[OriginField]) -> proc_macro2::TokenSt
     }
 }
 
+fn get_native_default_impl(native_fields: &[NativeField], native_name: &proc_macro2::Ident) -> proc_macro2::TokenStream {
+    let default_fields = native_fields.iter().map(|field| {
+        let name = &field.name;
+        if let Some(default) = &field.default_func {
+            // let default_quote = quote! { #default };
+            let default_quote = quote::format_ident!("{}", default.as_str());
+            match field.type_name.as_str() {
+                "str" => quote! {
+                    #name: #default_quote()
+                },
+                "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "datetime" | "date" | "time" | "enum" | "decimal" => {
+                    quote! {
+                        #name: Some(#default_quote())
+                    }
+                },
+                _ => quote! {
+                    #name: Default::default()
+                }
+            }
+        } else {
+            quote! {
+                #name: Default::default()
+            }
+        }
+    });
+
+    quote! {
+        impl Default for #native_name {
+            fn default() -> Self {
+                Self {
+                    #(#default_fields,)*
+                }
+            }
+        }
+    }
+}
+
 fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
     let name = &input.ident;
     let native_name = quote::format_ident!("{}Native", name);
@@ -745,9 +789,10 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
     let from_native_fields_token = get_from_native_fields(&native_field_map);
     let native_methods = get_native_methods(&native_fields);
     let field_spec_methods = get_field_spec_methods(&origin_fields);
+    let native_default_impl = get_native_default_impl(&native_fields, &native_name);
 
     let gen = quote! {
-        #[derive(Debug, PartialEq, Serialize, Deserialize, Default)]
+        #[derive(Debug, PartialEq, Serialize, Deserialize)]
         pub struct #native_name {
             #(#native_fields_token,)*
         }
@@ -852,6 +897,8 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
                 write!(f, " }}")
             }
         }
+
+        #native_default_impl
     };
 
     gen.into()

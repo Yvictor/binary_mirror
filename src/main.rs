@@ -10,6 +10,14 @@ enum OrderSide {
     Sell,
 }
 
+pub fn now() -> chrono::NaiveDateTime {
+    chrono::Local::now().naive_utc()
+}
+
+pub fn default_str() -> String {
+    "UNKNOWN".into()
+}
+
 #[repr(C)]
 #[derive(BinaryMirror)]
 pub struct SomePayload {
@@ -27,12 +35,16 @@ pub struct SomePayload {
     // date: [u8; 8],
     // #[bm(type = "time", format = "%H%M%S")]
     // time: [u8; 6],
-    #[bm(type = "date", format = "%Y%m%d", datetime_with = "time", alias = "datetime", skip = true)]
+    #[bm(type = "date", format = "%Y%m%d", datetime_with = "time", alias = "datetime", skip = true, default_func = "now")]
     date: [u8; 8],
     #[bm(type = "time", format = "%H%M%S", skip = true)]
     time: [u8; 6],
     #[bm(type = "i32")]
     err_case: [u8; 4],
+    #[bm(type = "str", default_func = "default_str")]
+    name: [u8; 10],
+    #[bm(type = "i32")]
+    value: [u8; 4],
 }
 
 // #[tokio::main]
@@ -47,6 +59,8 @@ fn main() {
         .with_line_number(true)
         .with_level(true)
         .init();
+    let n = now();
+    println!("{}", n);
     let payload = SomePayload {
         company: *b"COMPANY   ",
         exh: *b"EXCHANGE",
@@ -56,6 +70,8 @@ fn main() {
         date: *b"20240101",
         time: *b"123456",
         err_case: *b"12xx",
+        name: *b"UNKNOWN   ",
+        value: *b"0042",
     };
     
     println!("{:?}", payload);
