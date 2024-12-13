@@ -51,7 +51,6 @@ struct NativeField2OriginFieldMap {
     native_field: Option<NativeField>,
 }
 
-
 fn get_field_attrs(attrs: &[syn::Attribute]) -> Option<FieldAttrs> {
     for attr in attrs {
         if attr.path().is_ident("bm") {
@@ -85,7 +84,7 @@ fn get_field_attrs(attrs: &[syn::Attribute]) -> Option<FieldAttrs> {
                 } else if meta.path.is_ident("enum_type") {
                     let lit = meta.value()?.parse::<LitStr>()?;
                     field_attrs.enum_type = Some(lit.value());
-                } else if meta.path.is_ident("default_byte") {                    
+                } else if meta.path.is_ident("default_byte") {
                     let lit = meta.value()?.parse::<syn::LitByte>()?;
                     field_attrs.default_byte = Some(lit.value());
                 } else if meta.path.is_ident("ignore_warn") {
@@ -203,13 +202,19 @@ fn get_native_fields_and_map(
                         "bytes" => {
                             let size = field.size;
                             (quote!([u8; #size]), quote!([u8; #size]))
-                        },
+                        }
                         "i32" | "i64" | "u32" | "u64" | "f32" | "f64" => {
                             let type_ident = quote::format_ident!("{}", attrs.type_name);
                             (quote!(Option<#type_ident>), quote!(#type_ident))
                         }
-                        "decimal" => (quote!(Option<rust_decimal::Decimal>), quote!(rust_decimal::Decimal)),
-                        "datetime" => (quote!(Option<chrono::NaiveDateTime>), quote!(chrono::NaiveDateTime)),
+                        "decimal" => (
+                            quote!(Option<rust_decimal::Decimal>),
+                            quote!(rust_decimal::Decimal),
+                        ),
+                        "datetime" => (
+                            quote!(Option<chrono::NaiveDateTime>),
+                            quote!(chrono::NaiveDateTime),
+                        ),
                         "date" => (quote!(Option<chrono::NaiveDate>), quote!(chrono::NaiveDate)),
                         "time" => (quote!(Option<chrono::NaiveTime>), quote!(chrono::NaiveTime)),
                         "enum" => {
@@ -328,7 +333,7 @@ fn get_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
                     "str" => quote! {
                         pub fn #name(&self) -> String {
                             String::from_utf8_lossy(&self.#origin_field).trim().to_string()
-                        } 
+                        }
 
                         pub fn #method_with_warn_name(&self) -> String {
                             String::from_utf8_lossy(&self.#origin_field).trim().to_string()
@@ -345,7 +350,7 @@ fn get_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
                                 self.#origin_field
                             }
                         }
-                    },
+                    }
                     "i32" | "i64" | "u32" | "u64" | "f32" | "f64" => {
                         let type_ident = quote::format_ident!("{}", attrs.type_name);
                         quote! {
@@ -548,22 +553,29 @@ fn get_native_fields_token(native_fields: &[NativeField]) -> Vec<proc_macro2::To
 }
 
 fn get_to_native_fields(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
-    native_fields.iter().map(|field| {
-        let name = &field.name;
-        let ignore_warn = field.origin_fields[0].attrs.as_ref()
-            .map(|attrs| attrs.ignore_warn)
-            .unwrap_or(false);
+    native_fields
+        .iter()
+        .map(|field| {
+            let name = &field.name;
+            let ignore_warn = field.origin_fields[0]
+                .attrs
+                .as_ref()
+                .map(|attrs| attrs.ignore_warn)
+                .unwrap_or(false);
 
-        if ignore_warn {
-            quote! { #name: self.#name() }
-        } else {
-            let method_name = quote::format_ident!("{}_with_warn", name);
-            quote! { #name: self.#method_name() }
-        }
-    }).collect()
+            if ignore_warn {
+                quote! { #name: self.#name() }
+            } else {
+                let method_name = quote::format_ident!("{}_with_warn", name);
+                quote! { #name: self.#method_name() }
+            }
+        })
+        .collect()
 }
 
-fn get_from_native_fields(native_field_map: &[NativeField2OriginFieldMap]) -> Vec<proc_macro2::TokenStream> {
+fn get_from_native_fields(
+    native_field_map: &[NativeField2OriginFieldMap],
+) -> Vec<proc_macro2::TokenStream> {
     native_field_map.iter().map(|mapping| {
         let field_name = &mapping.origin_field.name;
         let size = mapping.origin_field.size;
@@ -596,10 +608,26 @@ fn get_from_native_fields(native_field_map: &[NativeField2OriginFieldMap]) -> Ve
                         bytes
                     }
                 },
-                "date" if native_field.is_combined_datetime => {
+                "datetime" => {
                     let format = attrs.format.as_ref()
                         .map(String::as_str)
-                        .unwrap_or("%Y%m%d");
+                        .unwrap_or("%Y-%m-%d %H:%M:%S");
+                    quote! {
+                        #field_name: {
+                            let mut bytes = [#default_byte; #size];
+                            if let Some(dt) = native.#native_name {
+                                let s = dt.format(#format).to_string();
+                                let b = s.as_bytes();
+                                bytes[..b.len().min(#size)].copy_from_slice(&b[..b.len().min(#size)]);
+                            }
+                            bytes
+                        }
+                    }
+                }
+                "date" => {
+                    let format = attrs.format.as_ref()
+                        .map(String::as_str)
+                        .unwrap_or("%Y-%m-%d");
                     quote! {
                         #field_name: {
                             let mut bytes = [#default_byte; #size];
@@ -612,7 +640,7 @@ fn get_from_native_fields(native_field_map: &[NativeField2OriginFieldMap]) -> Ve
                         }
                     }
                 },
-                "time" if native_field.is_combined_datetime => {
+                "time" => {
                     let format = attrs.format.as_ref()
                         .map(String::as_str)
                         .unwrap_or("%H%M%S");
@@ -680,36 +708,39 @@ fn get_from_native_fields(native_field_map: &[NativeField2OriginFieldMap]) -> Ve
 }
 
 fn get_native_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
-    native_fields.iter().map(|field| {
-        let name = &field.name;
-        let method_name = quote::format_ident!("with_{}", name);
-        let ty = &field.pure_ty;
-        let type_name = &field.type_name;
+    native_fields
+        .iter()
+        .map(|field| {
+            let name = &field.name;
+            let method_name = quote::format_ident!("with_{}", name);
+            let ty = &field.pure_ty;
+            let type_name = &field.type_name;
 
-        match type_name.as_str() {
-            "str" => quote! {
-                pub fn #method_name(mut self, value: impl Into<String>) -> Self {
-                    self.#name = value.into();
-                    self
-                }
-            },
-            "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "decimal" | "datetime" | "date"
-            | "time" | "enum" => {
-                quote! {
-                    pub fn #method_name(mut self, value: #ty) -> Self {
-                        self.#name = Some(value);
+            match type_name.as_str() {
+                "str" => quote! {
+                    pub fn #method_name(mut self, value: impl Into<String>) -> Self {
+                        self.#name = value.into();
                         self
                     }
+                },
+                "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "decimal" | "datetime" | "date"
+                | "time" | "enum" => {
+                    quote! {
+                        pub fn #method_name(mut self, value: #ty) -> Self {
+                            self.#name = Some(value);
+                            self
+                        }
+                    }
                 }
-            },
-            _ => quote! {
-                pub fn #method_name(mut self, value: #ty) -> Self {
-                    self.#name = value;
-                    self
-                }
+                _ => quote! {
+                    pub fn #method_name(mut self, value: #ty) -> Self {
+                        self.#name = value;
+                        self
+                    }
+                },
             }
-        }
-    }).collect()
+        })
+        .collect()
 }
 
 fn get_field_spec_methods(origin_fields: &[OriginField]) -> proc_macro2::TokenStream {
@@ -721,7 +752,7 @@ fn get_field_spec_methods(origin_fields: &[OriginField]) -> proc_macro2::TokenSt
         let limit = offset + field_size;
         cumulative_size = limit;
         let method_name = quote::format_ident!("{}_spec", field_name);
-        
+
         quote! {
             pub fn #method_name() -> binary_mirror::FieldSpec {
                 binary_mirror::FieldSpec {
@@ -738,7 +769,10 @@ fn get_field_spec_methods(origin_fields: &[OriginField]) -> proc_macro2::TokenSt
     }
 }
 
-fn get_native_default_impl(native_fields: &[NativeField], native_name: &proc_macro2::Ident) -> proc_macro2::TokenStream {
+fn get_native_default_impl(
+    native_fields: &[NativeField],
+    native_name: &proc_macro2::Ident,
+) -> proc_macro2::TokenStream {
     let default_fields = native_fields.iter().map(|field| {
         let name = &field.name;
         if let Some(default) = &field.default_func {
@@ -748,14 +782,15 @@ fn get_native_default_impl(native_fields: &[NativeField], native_name: &proc_mac
                 "str" => quote! {
                     #name: #default_quote()
                 },
-                "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "datetime" | "date" | "time" | "enum" | "decimal" => {
+                "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "datetime" | "date" | "time"
+                | "enum" | "decimal" => {
                     quote! {
                         #name: Some(#default_quote())
                     }
-                },
+                }
                 _ => quote! {
                     #name: Default::default()
-                }
+                },
             }
         } else {
             quote! {

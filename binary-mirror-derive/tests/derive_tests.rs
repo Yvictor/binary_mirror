@@ -1,7 +1,5 @@
-use std::default;
-
 use binary_mirror_derive::{BinaryEnum, BinaryMirror};
-use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
+use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use rust_decimal::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -26,7 +24,6 @@ enum OrderType {
     #[bv(value = b"LMT")]
     Limit,
 }
-
 
 #[repr(C)]
 #[derive(BinaryMirror)]
@@ -69,10 +66,13 @@ fn test_with_datetime() {
         dt: *b"20240101123456",
     };
     println!("{:?}", dt);
-    assert_eq!(dt.dt(), Some(NaiveDateTime::new(
-        NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-        NaiveTime::from_hms_opt(12, 34, 56).unwrap()
-    )));
+    assert_eq!(
+        dt.dt(),
+        Some(NaiveDateTime::new(
+            NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            NaiveTime::from_hms_opt(12, 34, 56).unwrap()
+        ))
+    );
 }
 
 #[derive(BinaryMirror)]
@@ -94,11 +94,11 @@ fn test_with_default_byte() {
 #[repr(C)]
 #[derive(BinaryMirror)]
 struct WithDefaultBytes {
-    #[bm(type = "str", default_byte = b'\x08')]  // 0x08 hex
+    #[bm(type = "str", default_byte = b'\x08')] // 0x08 hex
     hex: [u8; 5],
-    #[bm(type = "str", default_byte = b'\x00')]  // Null in hex
+    #[bm(type = "str", default_byte = b'\x00')] // Null in hex
     null: [u8; 5],
-    #[bm(type = "str", default_byte = b'0')]  // Regular byte literal
+    #[bm(type = "str", default_byte = b'0')] // Regular byte literal
     zero: [u8; 5],
 }
 
@@ -110,12 +110,11 @@ fn test_default_bytes() {
         .with_zero("abc");
 
     let binary = WithDefaultBytes::from_native(&native);
-    
-    assert_eq!(&binary.hex, b"abc\x08\x08");  // Padded with spaces (0x08)
-    assert_eq!(&binary.null, b"abc\x00\x00");  // Padded with nulls (0x00)
-    assert_eq!(&binary.zero, b"abc00");  // Padded with '0' chars
-}
 
+    assert_eq!(&binary.hex, b"abc\x08\x08"); // Padded with spaces (0x08)
+    assert_eq!(&binary.null, b"abc\x00\x00"); // Padded with nulls (0x00)
+    assert_eq!(&binary.zero, b"abc00"); // Padded with '0' chars
+}
 
 #[test]
 fn test_struct_derivation() {
@@ -344,7 +343,6 @@ fn test_struct_from_native() {
     println!("{:?}", test);
     println!("{:?}", parsed);
     assert_eq!(bytes, parsed_bytes);
-
 }
 
 #[test]
@@ -397,24 +395,30 @@ fn test_binary_enum_roundtrip() {
     // Test custom byte values
     assert_eq!(OrderSide::Buy.as_bytes(), b"B");
     assert_eq!(OrderSide::Sell.as_bytes(), b"S");
-    
+
     // Test roundtrip
     let buy = OrderSide::from_bytes(b"B").unwrap();
     assert_eq!(OrderSide::from_bytes(buy.as_bytes()), Some(OrderSide::Buy));
-    
+
     let sell = OrderSide::from_bytes(b"S").unwrap();
-    assert_eq!(OrderSide::from_bytes(sell.as_bytes()), Some(OrderSide::Sell));
+    assert_eq!(
+        OrderSide::from_bytes(sell.as_bytes()),
+        Some(OrderSide::Sell)
+    );
 
     // Test default behavior
     assert_eq!(Direction::Up.as_bytes(), b"U");
     assert_eq!(Direction::Down.as_bytes(), b"D");
-    
+
     // Test roundtrip with default behavior
     let up = Direction::from_bytes(b"U").unwrap();
     assert_eq!(Direction::from_bytes(up.as_bytes()), Some(Direction::Up));
-    
+
     let down = Direction::from_bytes(b"D").unwrap();
-    assert_eq!(Direction::from_bytes(down.as_bytes()), Some(Direction::Down));
+    assert_eq!(
+        Direction::from_bytes(down.as_bytes()),
+        Some(Direction::Down)
+    );
 }
 
 #[repr(C)]
@@ -430,9 +434,9 @@ struct WithIgnoreWarn {
 fn test_ignore_warn() {
     let test = WithIgnoreWarn {
         name: *b"Hello     ",
-        value: *b"abc ",  // Invalid value
+        value: *b"abc ", // Invalid value
     };
-    
+
     let native = test.to_native();
     // No warning will be logged for value field
     assert_eq!(native.value, None);
@@ -448,7 +452,7 @@ fn test_native_builder() {
         .with_exchange("NYSE")
         .with_datetime(NaiveDateTime::new(
             NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-            NaiveTime::from_hms_opt(12, 34, 56).unwrap()
+            NaiveTime::from_hms_opt(12, 34, 56).unwrap(),
         ))
         .with_side(OrderSide::Buy);
 
@@ -457,10 +461,13 @@ fn test_native_builder() {
     assert_eq!(native.decimal, Some(Decimal::from_str("123.45").unwrap()));
     assert_eq!(native.f32, Some(123.4));
     assert_eq!(native.exchange, "NYSE");
-    assert_eq!(native.datetime, Some(NaiveDateTime::new(
-        NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-        NaiveTime::from_hms_opt(12, 34, 56).unwrap()
-    )));
+    assert_eq!(
+        native.datetime,
+        Some(NaiveDateTime::new(
+            NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            NaiveTime::from_hms_opt(12, 34, 56).unwrap()
+        ))
+    );
     assert_eq!(native.side, Some(OrderSide::Buy));
 
     // Convert to binary format
@@ -470,19 +477,22 @@ fn test_native_builder() {
     assert_eq!(binary.decimal(), Some(Decimal::from_str("123.45").unwrap()));
     assert_eq!(binary.f32(), Some(123.4));
     assert_eq!(binary.exchange(), "NYSE");
-    assert_eq!(binary.datetime(), Some(NaiveDateTime::new(
-        NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-        NaiveTime::from_hms_opt(12, 34, 56).unwrap()
-    )));
+    assert_eq!(
+        binary.datetime(),
+        Some(NaiveDateTime::new(
+            NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            NaiveTime::from_hms_opt(12, 34, 56).unwrap()
+        ))
+    );
     assert_eq!(binary.side(), Some(OrderSide::Buy));
 }
 
 #[repr(C)]
 #[derive(BinaryMirror)]
 struct WithNumberFormat {
-    #[bm(type = "i32", format = "{:04}")]  // Zero-padded 4 digits
+    #[bm(type = "i32", format = "{:04}")] // Zero-padded 4 digits
     value: [u8; 4],
-    #[bm(type = "f32", format = "{:09.3}")]  // 2 decimal places
+    #[bm(type = "f32", format = "{:09.3}")] // 2 decimal places
     price: [u8; 9],
     #[bm(type = "f32", format = "{:010.3}")]
     nagtive: [u8; 10],
@@ -506,7 +516,10 @@ fn test_number_format() {
     assert_eq!(binary.price(), Some(123.45)); // Rounded to 2 decimals
     assert_eq!(binary.nagtive(), Some(-123.45));
     assert_eq!(binary.decimal(), Some(Decimal::from_str("123.45").unwrap()));
-    assert_eq!(binary.decimal_with_neg(), Some(Decimal::from_str("-123.45").unwrap())); 
+    assert_eq!(
+        binary.decimal_with_neg(),
+        Some(Decimal::from_str("-123.45").unwrap())
+    );
     // Check raw bytes format
     println!("{:?}", binary);
     assert_eq!(&binary.value, b"0042");
@@ -548,10 +561,16 @@ fn test_bytes_serde() {
     };
 
     let json = serde_json::to_string(&native).unwrap();
-    assert_eq!(json, r#"{"raw":[1,2,3,32,32,32,32,32,32,32],"padded":[255,254,48,48,48]}"#);
+    assert_eq!(
+        json,
+        r#"{"raw":[1,2,3,32,32,32,32,32,32,32],"padded":[255,254,48,48,48]}"#
+    );
 
     let parsed: WithBytesNative = serde_json::from_str(&json).unwrap();
-    assert_eq!(parsed.raw, [1, 2, 3, b' ', b' ', b' ', b' ', b' ', b' ', b' ']);
+    assert_eq!(
+        parsed.raw,
+        [1, 2, 3, b' ', b' ', b' ', b' ', b' ', b' ', b' ']
+    );
     assert_eq!(parsed.padded, [0xFF, 0xFE, b'0', b'0', b'0']);
 }
 
@@ -570,17 +589,23 @@ fn test_field_specs() {
     // Test field access using spec
     let bytes = b"Hello     123 no_type000000123.4500000000123.4CME       20240101123456B";
     let _test = TestStruct::from_bytes(bytes).unwrap();
-    
+
     // Get field slices using spec
     let spec = TestStruct::name_spec();
     assert_eq!(&bytes[spec.offset..spec.limit], b"Hello     ");
-    
+
     let spec = TestStruct::decimal_spec();
     assert_eq!(&bytes[spec.offset..spec.limit], b"000000123.4500000000");
 
     // Test field boundaries
-    assert_eq!(TestStruct::name_spec().limit, TestStruct::value_spec().offset);
-    assert_eq!(TestStruct::value_spec().limit, TestStruct::no_type_spec().offset);
+    assert_eq!(
+        TestStruct::name_spec().limit,
+        TestStruct::value_spec().offset
+    );
+    assert_eq!(
+        TestStruct::value_spec().limit,
+        TestStruct::no_type_spec().offset
+    );
 }
 
 #[test]
@@ -593,11 +618,17 @@ fn test_multi_byte_enum() {
     // Test roundtrip
     let market = OrderType::Market;
     assert_eq!(market.as_bytes(), b"MKT");
-    assert_eq!(OrderType::from_bytes(market.as_bytes()), Some(OrderType::Market));
+    assert_eq!(
+        OrderType::from_bytes(market.as_bytes()),
+        Some(OrderType::Market)
+    );
 
     let limit = OrderType::Limit;
     assert_eq!(limit.as_bytes(), b"LMT");
-    assert_eq!(OrderType::from_bytes(limit.as_bytes()), Some(OrderType::Limit));
+    assert_eq!(
+        OrderType::from_bytes(limit.as_bytes()),
+        Some(OrderType::Limit)
+    );
 
     // Test in struct
     #[repr(C)]
@@ -624,6 +655,25 @@ fn default_str() -> String {
     "UNKNOWN".to_string()
 }
 
+fn now() -> chrono::NaiveDateTime {
+    chrono::Local::now().naive_utc().with_nanosecond(0).unwrap()
+}
+
+fn today() -> chrono::NaiveDate {
+    chrono::Local::now().date_naive()
+}
+
+fn now_time() -> chrono::NaiveTime {
+    chrono::Local::now().time().with_nanosecond(0).unwrap()
+}
+
+fn order_type_default() -> OrderType {
+    OrderType::Limit
+}
+
+fn decimal_default() -> Decimal {
+    Decimal::from_str("123.45").unwrap()
+}
 
 #[repr(C)]
 #[derive(BinaryMirror)]
@@ -632,41 +682,56 @@ struct WithDefaults {
     name: [u8; 10],
     #[bm(type = "i32", default_func = "default_i32")]
     value: [u8; 4],
-    // #[bm(type = "f32", default = 3.14)]
-    // price: [u8; 6],
-    // #[bm(type = "decimal", default = "123.45")]
-    // amount: [u8; 10],
-    // #[bm(type = "enum", enum_type = "OrderType", default = OrderType::Market)]
-    // order_type: [u8; 3],
-    // #[bm(type = "datetime", default = {chrono::Utc::now()})]
-    // timestamp: [u8; 14],
+    #[bm(type = "datetime", default_func = "now", format = "%Y%m%d%H%M%S")]
+    timestamp: [u8; 14],
+    #[bm(type = "date", default_func = "today", format = "%Y%m%d")]
+    today: [u8; 8],
+    #[bm(type = "time", default_func = "now_time", format = "%H%M%S")]
+    time: [u8; 6],
+    #[bm(
+        type = "date",
+        default_func = "now",
+        format = "%Y-%m-%d",
+        datetime_with = "tt",
+        alias = "concate_datetime"
+    )]
+    date: [u8; 10],
+    #[bm(type = "time", format = "%H:%M:%S")]
+    tt: [u8; 8],
+    #[bm(
+        type = "enum",
+        enum_type = "OrderType",
+        default_func = "order_type_default"
+    )]
+    order_type: [u8; 3],
+    #[bm(type = "decimal", default_func = "decimal_default")]
+    decimal: [u8; 10],
 }
 
 #[test]
 fn test_defaults() {
     let native = WithDefaultsNative::default();
+    println!("{:?}", native);
     let binary = WithDefaults::from_native(&native);
-
+    println!("{:?}", binary);
     assert_eq!(binary.name(), "UNKNOWN");
     assert_eq!(binary.value(), Some(42));
-    // assert_eq!(binary.price(), Some(3.14));
-    // assert_eq!(binary.amount(), Some(Decimal::from_str("123.45").unwrap()));
-    // assert_eq!(binary.order_type(), Some(OrderType::Market));
-    // assert!(binary.timestamp().is_some()); // Current time
+    assert_eq!(binary.timestamp(), Some(now()));
+    assert_eq!(binary.today(), Some(today()));
+    assert_eq!(binary.time(), Some(now_time()));
+    assert_eq!(binary.concate_datetime(), Some(now()));
+    assert_eq!(binary.order_type(), Some(OrderType::Limit));
+    assert_eq!(binary.decimal(), Some(Decimal::from_str("123.45").unwrap()));
+    // Test overriding defaults
+    let native = WithDefaultsNative::default()
+        .with_name("TEST")
+        .with_value(100)
+        .with_decimal(Decimal::from_str("999.99").unwrap())
+        .with_order_type(OrderType::Market);
 
-    // // Test overriding defaults
-    // let native = WithDefaultsNative::default()
-    //     .with_name("TEST")
-    //     .with_value(100)
-    //     .with_price(99.99)
-    //     .with_amount(Decimal::from_str("999.99").unwrap())
-    //     .with_order_type(OrderType::Limit);
-
-    // let binary = WithDefaults::from_native(&native);
-    // assert_eq!(binary.name(), "TEST");
-    // assert_eq!(binary.value(), Some(100));
-    // assert_eq!(binary.price(), Some(99.99));
-    // assert_eq!(binary.amount(), Some(Decimal::from_str("999.99").unwrap()));
-    // assert_eq!(binary.order_type(), Some(OrderType::Limit));
+    let binary = WithDefaults::from_native(&native);
+    assert_eq!(binary.name(), "TEST");
+    assert_eq!(binary.value(), Some(100));
+    assert_eq!(binary.decimal(), Some(Decimal::from_str("999.99").unwrap()));
+    assert_eq!(binary.order_type(), Some(OrderType::Market));
 }
-
