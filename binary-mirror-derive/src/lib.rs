@@ -810,6 +810,16 @@ fn get_native_default_impl(
     }
 }
 
+fn get_native_to_raw_impl(name: &syn::Ident, native_name: &proc_macro2::Ident) -> proc_macro2::TokenStream {
+    quote! {
+        impl #native_name {
+            pub fn to_raw(&self) -> #name {
+                #name::from_native(self)
+            }
+        }
+    }
+}
+
 fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
     let name = &input.ident;
     let native_name = quote::format_ident!("{}Native", name);
@@ -825,6 +835,7 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
     let native_methods = get_native_methods(&native_fields);
     let field_spec_methods = get_field_spec_methods(&origin_fields);
     let native_default_impl = get_native_default_impl(&native_fields, &native_name);
+    let native_to_raw_impl = get_native_to_raw_impl(name, &native_name);
 
     let gen = quote! {
         #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -934,6 +945,7 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
         }
 
         #native_default_impl
+        #native_to_raw_impl
     };
 
     gen.into()

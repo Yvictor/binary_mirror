@@ -735,3 +735,39 @@ fn test_defaults() {
     assert_eq!(binary.decimal(), Some(Decimal::from_str("999.99").unwrap()));
     assert_eq!(binary.order_type(), Some(OrderType::Market));
 }
+
+#[test]
+fn test_native_to_raw() {
+    // Create native struct with builder pattern
+    let native = TestStructNative::default()
+        .with_name("AAPL")
+        .with_value(123)
+        .with_decimal(Decimal::from_str("123.45").unwrap())
+        .with_f32(123.4)
+        .with_exchange("NYSE")
+        .with_datetime(NaiveDateTime::new(
+            NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            NaiveTime::from_hms_opt(12, 34, 56).unwrap(),
+        ))
+        .with_side(OrderSide::Buy);
+
+    // Convert directly to raw binary struct
+    let raw = native.to_raw();
+
+    // Verify values
+    assert_eq!(raw.name(), "AAPL");
+    assert_eq!(raw.value(), Some(123));
+    assert_eq!(raw.decimal(), Some(Decimal::from_str("123.45").unwrap()));
+    assert_eq!(raw.f32(), Some(123.4));
+    assert_eq!(raw.exchange(), "NYSE");
+    assert_eq!(raw.datetime(), Some(NaiveDateTime::new(
+        NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+        NaiveTime::from_hms_opt(12, 34, 56).unwrap()
+    )));
+    assert_eq!(raw.side(), Some(OrderSide::Buy));
+
+    // Test roundtrip
+    let native2 = raw.to_native();
+    let raw2 = native2.to_raw();
+    assert_eq!(raw.to_bytes(), raw2.to_bytes());
+}
