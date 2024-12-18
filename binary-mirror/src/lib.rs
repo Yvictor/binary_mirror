@@ -79,3 +79,8 @@ pub trait FromNative<T> {
     /// Create from native type
     fn from_native(native: &T) -> Self;
 }
+
+pub trait NativeStructCode {
+    /// Get the native struct code as a string
+    fn native_struct_code() -> String;
+}

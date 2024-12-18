@@ -151,14 +151,14 @@ dependencies = [
 
 [[package]]
 name = "binary-mirror"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "binary-mirror-demo"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "binary-mirror",
  "binary-mirror-derive",
@@ -174,7 +174,7 @@ dependencies = [
 
 [[package]]
 name = "binary-mirror-derive"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "binary-mirror",
  "chrono",

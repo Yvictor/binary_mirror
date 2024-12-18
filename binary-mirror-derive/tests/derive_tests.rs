@@ -2,7 +2,7 @@ use binary_mirror_derive::{BinaryEnum, BinaryMirror};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use rust_decimal::prelude::*;
 use serde::{Deserialize, Serialize};
-use binary_mirror::{FromBytes, ToBytes, ToNative, FromNative};
+use binary_mirror::{FromBytes, ToBytes, ToNative, FromNative, NativeStructCode};
 
 #[derive(Debug, PartialEq, BinaryEnum, Serialize, Deserialize)]
 enum OrderSide {
@@ -771,4 +771,22 @@ fn test_native_to_raw() {
     let native2 = raw.to_native();
     let raw2 = native2.to_raw();
     assert_eq!(raw.to_bytes(), raw2.to_bytes());
+}
+
+#[test]
+fn test_native_struct_code() {
+    let code = TestStruct::native_struct_code();
+    assert_eq!(
+        code,
+        r#"#[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct TestStructNative {
+    pub name: String,
+    pub value: Option<i32>,
+    pub decimal: Option<rust_decimal::Decimal>,
+    pub f32: Option<f32>,
+    pub exchange: String,
+    pub datetime: Option<chrono::NaiveDateTime>,
+    pub side: Option<OrderSide>,
+}"#
+    );
 }

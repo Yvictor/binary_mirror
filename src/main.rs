@@ -1,6 +1,6 @@
 use binary_mirror_derive::{BinaryMirror, BinaryEnum};
 use serde::{Serialize, Deserialize};
-use binary_mirror::{ToNative, FromNative};
+use binary_mirror::{ToNative, FromNative, NativeStructCode};
 
 
 #[derive(Debug, PartialEq, BinaryEnum, Serialize, Deserialize)]
@@ -74,7 +74,7 @@ fn main() {
         name: *b"UNKNOWN   ",
         value: *b"0042",
     };
-    
+    println!("{}", SomePayload::native_struct_code());
     println!("{:?}", payload);
     println!("{}", payload);
     let native = payload.to_native();

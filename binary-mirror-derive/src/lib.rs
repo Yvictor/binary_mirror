@@ -810,11 +810,49 @@ fn get_native_default_impl(
     }
 }
 
-fn get_native_to_raw_impl(name: &syn::Ident, native_name: &proc_macro2::Ident) -> proc_macro2::TokenStream {
+fn get_native_to_raw_impl(
+    name: &syn::Ident,
+    native_name: &proc_macro2::Ident,
+) -> proc_macro2::TokenStream {
     quote! {
         impl #native_name {
             pub fn to_raw(&self) -> #name {
                 #name::from_native(self)
+            }
+        }
+    }
+}
+
+fn get_native_struct_code(
+    name: &syn::Ident,
+    native_fields: &[NativeField],
+) -> proc_macro2::TokenStream {
+    let native_name = quote::format_ident!("{}Native", name);
+    let fields_code = native_fields
+        .iter()
+        .map(|field| {
+            let name = &field.name;
+            let ty = &field.ty;
+            // Convert TokenStream to string and normalize whitespace
+            let ty_str = ty
+                .to_string()
+                .replace(" :: ", "::")
+                .replace(" < ", "<")
+                .replace(" > ", ">")
+                .replace(" >", ">");
+            format!("    pub {}: {},", name, ty_str)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    quote! {
+        impl binary_mirror::NativeStructCode for #name {
+            fn native_struct_code() -> String {
+                format!(
+                    "#[derive(Debug, Default, PartialEq, Serialize, Deserialize)]\npub struct {} {{\n{}\n}}",
+                    stringify!(#native_name),
+                    #fields_code
+                )
             }
         }
     }
@@ -836,6 +874,7 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
     let field_spec_methods = get_field_spec_methods(&origin_fields);
     let native_default_impl = get_native_default_impl(&native_fields, &native_name);
     let native_to_raw_impl = get_native_to_raw_impl(name, &native_name);
+    let native_struct_code = get_native_struct_code(name, &native_fields);
 
     let gen = quote! {
         #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -849,7 +888,7 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
 
         impl #name {
             #(#methods)*
-            
+
             /// Get the size of the struct in bytes
             pub fn size() -> usize {
                 std::mem::size_of::<Self>()
@@ -885,6 +924,7 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
 
         #native_default_impl
         #native_to_raw_impl
+        #native_struct_code
 
         impl binary_mirror::FromBytes for #name {
             fn from_bytes(bytes: &[u8]) -> Result<&Self, binary_mirror::BytesSizeError> {
