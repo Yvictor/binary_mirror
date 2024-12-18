@@ -2,6 +2,7 @@ use binary_mirror_derive::{BinaryEnum, BinaryMirror};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use rust_decimal::prelude::*;
 use serde::{Deserialize, Serialize};
+use binary_mirror::{FromBytes, ToBytes, ToNative, FromNative};
 
 #[derive(Debug, PartialEq, BinaryEnum, Serialize, Deserialize)]
 enum OrderSide {

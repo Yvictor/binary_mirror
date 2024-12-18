@@ -849,71 +849,10 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
 
         impl #name {
             #(#methods)*
-
-            /// Create a new instance from bytes
-            /// Returns Err if the bytes length doesn't match the struct size
-            pub fn from_bytes(bytes: &[u8]) -> Result<&Self, binary_mirror::BytesSizeError> {
-                let expected = Self::size();
-                let actual = bytes.len();
-                if actual != expected {
-                    return Err(binary_mirror::BytesSizeError::new(
-                        expected,
-                        actual,
-                        bytes.iter()
-                        .map(|&b| {
-                            match b {
-                                0x0A => "\\n".to_string(),
-                                0x0D => "\\r".to_string(),
-                                0x09 => "\\t".to_string(),
-                                0x20..=0x7E => (b as char).to_string(),
-                                _ => format!("\\x{:02x}", b),
-                            }
-                        })
-                        .collect::<Vec<String>>()
-                        .join("")
-                    ));
-                }
-                // Safety:
-                // 1. We've verified the size matches
-                // 2. The struct is #[repr(C)]
-                // 3. The alignment is handled by the compiler
-                Ok(unsafe { &*(bytes.as_ptr() as *const Self) })
-            }
-
-            /// Convert the struct back to its binary representation
-            pub fn to_bytes(&self) -> &[u8] {
-                // Safety:
-                // 1. The struct is #[repr(C)]
-                // 2. We're reading the exact size of the struct
-                // 3. All fields are byte arrays
-                // 4. The returned slice lifetime is tied to self
-                unsafe {
-                    std::slice::from_raw_parts(
-                        (self as *const Self) as *const u8,
-                        Self::size()
-                    )
-                }
-            }
-
-            pub fn to_bytes_owned(&self) -> Vec<u8> {
-                self.to_bytes().to_vec()
-            }
-
+            
             /// Get the size of the struct in bytes
             pub fn size() -> usize {
                 std::mem::size_of::<Self>()
-            }
-
-            pub fn to_native(&self) -> #native_name {
-                #native_name {
-                    #(#to_native_fields_token,)*
-                }
-            }
-
-            pub fn from_native(native: &#native_name) -> Self {
-                Self {
-                    #(#from_native_fields_token,)*
-                }
             }
 
             #field_spec_methods
@@ -946,6 +885,75 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
 
         #native_default_impl
         #native_to_raw_impl
+
+        impl binary_mirror::FromBytes for #name {
+            fn from_bytes(bytes: &[u8]) -> Result<&Self, binary_mirror::BytesSizeError> {
+                let expected = Self::size();
+                let actual = bytes.len();
+                if actual != expected {
+                    return Err(binary_mirror::BytesSizeError::new(
+                        expected,
+                        actual,
+                        bytes.iter()
+                        .map(|&b| {
+                            match b {
+                                0x0A => "\\n".to_string(),
+                                0x0D => "\\r".to_string(),
+                                0x09 => "\\t".to_string(),
+                                0x20..=0x7E => (b as char).to_string(),
+                                _ => format!("\\x{:02x}", b),
+                            }
+                        })
+                        .collect::<Vec<String>>()
+                        .join("")
+                    ));
+                }
+                // Safety:
+                // 1. We've verified the size matches
+                // 2. The struct is #[repr(C)]
+                // 3. The alignment is handled by the compiler
+                Ok(unsafe { &*(bytes.as_ptr() as *const Self) })
+            }
+
+        }
+
+        impl binary_mirror::ToBytes for #name {
+            fn to_bytes(&self) -> &[u8] {
+                // Safety:
+                // 1. The struct is #[repr(C)]
+                // 2. We're reading the exact size of the struct
+                // 3. All fields are byte arrays
+                // 4. The returned slice lifetime is tied to self
+                unsafe {
+                    std::slice::from_raw_parts(
+                        (self as *const Self) as *const u8,
+                        Self::size()
+                    )
+                }
+            }
+
+            fn to_bytes_owned(&self) -> Vec<u8> {
+                self.to_bytes().to_vec()
+            }
+        }
+
+        impl binary_mirror::ToNative for #name {
+            type Native = #native_name;
+
+            fn to_native(&self) -> Self::Native {
+                #native_name {
+                    #(#to_native_fields_token,)*
+                }
+            }
+        }
+
+        impl binary_mirror::FromNative<#native_name> for #name {
+            fn from_native(native: &#native_name) -> Self {
+                Self {
+                    #(#from_native_fields_token,)*
+                }
+            }
+        }
     };
 
     gen.into()

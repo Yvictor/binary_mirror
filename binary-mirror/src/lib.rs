@@ -52,22 +52,30 @@ pub struct FieldSpec {
     pub size: usize,
 }
 
+pub trait FromBytes: Sized {
+    /// Create a new instance from bytes
+    /// Returns Err if the bytes length doesn't match the struct size
+    fn from_bytes(bytes: &[u8]) -> Result<&Self, BytesSizeError>;
+}
 
-// pub mod strp {
+pub trait ToBytes {
+    /// Convert the struct to its binary representation
+    fn to_bytes(&self) -> &[u8];
+    
+    /// Convert the struct to an owned Vec<u8>
+    fn to_bytes_owned(&self) -> Vec<u8> {
+        self.to_bytes().to_vec()
+    }
+}
 
-//     pub fn serialize<S>(value: &[u8], serializer: S) -> Result<S::Ok, S::Error>
-//     where
-//         S: serde::Serializer,
-//     {
-//         let s = String::from_utf8_lossy(value).trim().to_string();
-//         serializer.serialize_str(&s)
-//     }
+pub trait ToNative {
+    type Native;
+    
+    /// Convert to native type
+    fn to_native(&self) -> Self::Native;
+}
 
-//     pub fn deserialize<'de, D>(deserializer: D) -> Result<[u8; 10], D::Error>
-//     where
-//         D: serde::Deserializer<'de>,
-//     {
-//         let s: &[u8] = serde::Deserialize::deserialize(deserializer)?;
-//         Ok(s.try_into().unwrap())
-//     }
-// }
+pub trait FromNative<T> {
+    /// Create from native type
+    fn from_native(native: &T) -> Self;
+}

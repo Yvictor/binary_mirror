@@ -1,5 +1,6 @@
 use binary_mirror_derive::{BinaryMirror, BinaryEnum};
 use serde::{Serialize, Deserialize};
+use binary_mirror::{ToNative, FromNative};
 
 
 #[derive(Debug, PartialEq, BinaryEnum, Serialize, Deserialize)]
