@@ -51,6 +51,32 @@ struct NativeField2OriginFieldMap {
     native_field: Option<NativeField>,
 }
 
+#[derive(Debug, Clone)]
+struct StructAttrs {
+    derives: Vec<syn::Path>,
+}
+
+fn get_struct_attrs(input: &DeriveInput) -> StructAttrs {
+    let attrs = &input.attrs;
+    let mut struct_attrs = StructAttrs { derives: vec![] };
+    for attr in attrs {
+        if attr.path().is_ident("bm") {
+            let _ = attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("derive") {
+                    let content;
+                    syn::parenthesized!(content in meta.input);
+                    let derives: syn::punctuated::Punctuated<syn::Path, syn::Token![,]> = content
+                        .parse_terminated(syn::parse::Parse::parse, syn::Token![,])
+                        .expect("derive");
+                    struct_attrs.derives = derives.into_iter().collect();
+                }
+                Ok(())
+            });
+        }
+    }
+    struct_attrs
+}
+
 fn get_field_attrs(attrs: &[syn::Attribute]) -> Option<FieldAttrs> {
     for attr in attrs {
         if attr.path().is_ident("bm") {
@@ -849,7 +875,7 @@ fn get_native_struct_code(
         impl binary_mirror::NativeStructCode for #name {
             fn native_struct_code() -> String {
                 format!(
-                    "#[derive(Debug, Default, PartialEq, Serialize, Deserialize)]\npub struct {} {{\n{}\n}}",
+                    "pub struct {} {{\n{}\n}}",
                     stringify!(#native_name),
                     #fields_code
                 )
@@ -858,9 +884,23 @@ fn get_native_struct_code(
     }
 }
 
+fn get_native_derives(struct_attrs: &StructAttrs) -> proc_macro2::TokenStream {
+    if struct_attrs.derives.is_empty() {
+        quote!(Debug, PartialEq, Serialize, Deserialize)
+    } else {
+        let native_derives = struct_attrs
+            .derives
+            .iter()
+            .map(|derive| quote!(#derive))
+            .collect::<Vec<_>>();
+        quote!(#(#native_derives),*)
+    }
+}
+
 fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
     let name = &input.ident;
     let native_name = quote::format_ident!("{}Native", name);
+    let struct_attrs = get_struct_attrs(input);
 
     let origin_fields = get_origin_fields(input);
     let (native_fields, native_field_map) = get_native_fields_and_map(&origin_fields);
@@ -874,10 +914,11 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
     let field_spec_methods = get_field_spec_methods(&origin_fields);
     let native_default_impl = get_native_default_impl(&native_fields, &native_name);
     let native_to_raw_impl = get_native_to_raw_impl(name, &native_name);
+    let native_derives = get_native_derives(&struct_attrs);
     let native_struct_code = get_native_struct_code(name, &native_fields);
 
     let gen = quote! {
-        #[derive(Debug, PartialEq, Serialize, Deserialize)]
+        #[derive(#native_derives)]
         pub struct #native_name {
             #(#native_fields_token,)*
         }

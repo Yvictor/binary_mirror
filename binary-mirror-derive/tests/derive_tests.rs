@@ -778,8 +778,7 @@ fn test_native_struct_code() {
     let code = TestStruct::native_struct_code();
     assert_eq!(
         code,
-        r#"#[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
-pub struct TestStructNative {
+        r#"pub struct TestStructNative {
     pub name: String,
     pub value: Option<i32>,
     pub decimal: Option<rust_decimal::Decimal>,
@@ -789,4 +788,29 @@ pub struct TestStructNative {
     pub side: Option<OrderSide>,
 }"#
     );
+}
+
+
+#[repr(C)]
+#[derive(BinaryMirror)]
+#[bm(derive(Debug, Clone))]
+struct CustomDerives {
+    #[bm(type = "str")]
+    name: [u8; 10],
+}
+
+#[test]
+fn test_custom_native_derives() {
+    let code = CustomDerives::native_struct_code();
+    assert_eq!(
+        code,
+        r#"pub struct CustomDerivesNative {
+    pub name: String,
+}"#
+    );
+
+    // Test that the actual struct has the same derives
+    let native = CustomDerivesNative::default();
+    let _cloned = native.clone(); // Should compile because we have Clone
+    let _debug = format!("{:?}", native); // Should compile because we have Debug
 }

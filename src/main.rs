@@ -21,6 +21,7 @@ pub fn default_str() -> String {
 
 #[repr(C)]
 #[derive(BinaryMirror)]
+#[bm(derive(Debug, PartialEq, Serialize, Deserialize))]
 pub struct SomePayload {
     #[bm(type = "str")]
     company: [u8; 10],
