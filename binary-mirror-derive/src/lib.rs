@@ -229,7 +229,7 @@ fn get_native_fields_and_map(
                             let size = field.size;
                             (quote!([u8; #size]), quote!([u8; #size]))
                         }
-                        "i32" | "i64" | "u32" | "u64" | "f32" | "f64" => {
+                        "i16" | "i32" | "i64" | "u16" | "u32" | "u64" | "f32" | "f64" => {
                             let type_ident = quote::format_ident!("{}", attrs.type_name);
                             (quote!(Option<#type_ident>), quote!(#type_ident))
                         }
@@ -377,7 +377,7 @@ fn get_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
                             }
                         }
                     }
-                    "i32" | "i64" | "u32" | "u64" | "f32" | "f64" => {
+                    "i16" | "i32" | "i64" | "u16" | "u32" | "u64" | "f32" | "f64" => {
                         let type_ident = quote::format_ident!("{}", attrs.type_name);
                         quote! {
                             pub fn #name(&self) -> Option<#type_ident> {
@@ -539,8 +539,8 @@ fn get_display_fields(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenSt
                 "str" => quote! {
                     write!(f, "{}: {}", stringify!(#name), self.#method_name())?;
                 },
-                "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "decimal" | "datetime" | "date"
-                | "time" => quote! {
+                "i16" | "i32" | "i64" | "u16" | "u32" | "u64" | "f32" | "f64" | "decimal"
+                | "datetime" | "date" | "time" => quote! {
                     match self.#method_name() {
                         Some(val) => write!(f, "{}: {}", stringify!(#name), val)?,
                         None => write!(f, "{}: Error<bytes: \"{}\">",
@@ -682,7 +682,7 @@ fn get_from_native_fields(
                         }
                     }
                 },
-                "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "decimal" => {
+                "i16" | "i32" | "i64" | "u16" | "u32" | "u64" | "f32" | "f64" | "decimal" => {
                     if let Some(fmt) = format {
                         quote! {
                             #field_name: {
@@ -749,8 +749,8 @@ fn get_native_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenSt
                         self
                     }
                 },
-                "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "decimal" | "datetime" | "date"
-                | "time" | "enum" => {
+                "i16" | "i32" | "i64" | "u16" | "u32" | "u64" | "f32" | "f64" | "decimal"
+                | "datetime" | "date" | "time" | "enum" => {
                     quote! {
                         pub fn #method_name(mut self, value: #ty) -> Self {
                             self.#name = Some(value);
@@ -808,8 +808,8 @@ fn get_native_default_impl(
                 "str" => quote! {
                     #name: #default_quote()
                 },
-                "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "datetime" | "date" | "time"
-                | "enum" | "decimal" => {
+                "i16" | "i32" | "i64" | "u16" | "u32" | "u64" | "f32" | "f64" | "datetime"
+                | "date" | "time" | "enum" | "decimal" => {
                     quote! {
                         #name: Some(#default_quote())
                     }
