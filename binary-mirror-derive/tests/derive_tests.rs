@@ -857,4 +857,5 @@ fn test_skipped_fields() {
     let raw2 = native2.to_raw();
     assert_eq!(raw.to_bytes(), raw2.to_bytes());
     assert_eq!(WithSkippedFields::size(), 34);
+    assert_eq!(WithSkippedFields::SIZE, 34);
 }

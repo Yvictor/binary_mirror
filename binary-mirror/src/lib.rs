@@ -53,6 +53,9 @@ pub struct FieldSpec {
 }
 
 pub trait FromBytes: Sized {
+    /// Get the size of the struct in bytes
+    const SIZE: usize;
+
     /// Create a new instance from bytes
     /// Returns Err if the bytes length doesn't match the struct size
     fn from_bytes(bytes: &[u8]) -> Result<&Self, BytesSizeError>;

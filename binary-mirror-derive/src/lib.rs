@@ -974,8 +974,10 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
         #native_struct_code
 
         impl binary_mirror::FromBytes for #name {
+            const SIZE: usize = std::mem::size_of::<Self>();
+
             fn from_bytes(bytes: &[u8]) -> Result<&Self, binary_mirror::BytesSizeError> {
-                let expected = Self::size();
+                let expected = Self::SIZE;
                 let actual = bytes.len();
                 if actual != expected {
                     return Err(binary_mirror::BytesSizeError::new(
