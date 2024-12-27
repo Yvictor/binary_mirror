@@ -937,7 +937,7 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
             #(#methods)*
 
             /// Get the size of the struct in bytes
-            pub fn size() -> usize {
+            pub const fn size() -> usize {
                 std::mem::size_of::<Self>()
             }
 

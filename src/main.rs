@@ -1,7 +1,6 @@
-use binary_mirror_derive::{BinaryMirror, BinaryEnum};
-use serde::{Serialize, Deserialize};
-use binary_mirror::{ToNative, FromNative, NativeStructCode};
-
+use binary_mirror::{FromNative, NativeStructCode, ToNative};
+use binary_mirror_derive::{BinaryEnum, BinaryMirror};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, BinaryEnum, Serialize, Deserialize)]
 enum OrderSide {
@@ -21,7 +20,7 @@ pub fn default_str() -> String {
 
 #[repr(C)]
 #[derive(BinaryMirror)]
-#[bm(derive(Debug, PartialEq,Serialize, Deserialize))]
+#[bm(derive(Debug, PartialEq, Serialize, Deserialize))]
 pub struct SomePayload {
     #[bm(type = "str")]
     company: [u8; 10],
@@ -37,7 +36,14 @@ pub struct SomePayload {
     // date: [u8; 8],
     // #[bm(type = "time", format = "%H%M%S")]
     // time: [u8; 6],
-    #[bm(type = "date", format = "%Y%m%d", datetime_with = "time", alias = "datetime", skip = true, default_func = "now")]
+    #[bm(
+        type = "date",
+        format = "%Y%m%d",
+        datetime_with = "time",
+        alias = "datetime",
+        skip = true,
+        default_func = "now"
+    )]
     date: [u8; 8],
     #[bm(type = "time", format = "%H%M%S", skip = true)]
     time: [u8; 6],
@@ -52,7 +58,7 @@ pub struct SomePayload {
 }
 
 // #[tokio::main]
-// async 
+// async
 fn main() {
     // 初始化 tracing
     tracing_subscriber::fmt()
