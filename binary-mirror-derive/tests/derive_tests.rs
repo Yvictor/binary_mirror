@@ -833,10 +833,14 @@ fn test_skipped_fields() {
         .with_description("Description");
 
     let raw = native.to_raw();
+    let bytes = raw.to_bytes();
+    let parsed = WithSkippedFields::from_bytes(&bytes).unwrap();
 
     // Verify values
     assert_eq!(raw.name(), "TEST");
     assert_eq!(raw.description(), "Description");
+    assert_eq!(parsed.name(), "TEST");
+    assert_eq!(parsed.description(), "Description");
 
     // Verify native struct code doesn't include skipped field
     let code = WithSkippedFields::native_struct_code();
@@ -852,4 +856,5 @@ fn test_skipped_fields() {
     let native2 = raw.to_native();
     let raw2 = native2.to_raw();
     assert_eq!(raw.to_bytes(), raw2.to_bytes());
+    assert_eq!(WithSkippedFields::size(), 34);
 }
