@@ -21,7 +21,7 @@ pub fn default_str() -> String {
 
 #[repr(C)]
 #[derive(BinaryMirror)]
-#[bm(derive(Debug, PartialEq, Serialize, Deserialize))]
+#[bm(derive(Debug, PartialEq,Serialize, Deserialize))]
 pub struct SomePayload {
     #[bm(type = "str")]
     company: [u8; 10],
@@ -47,6 +47,8 @@ pub struct SomePayload {
     name: [u8; 10],
     #[bm(type = "i32")]
     value: [u8; 4],
+    #[bm(type = "str", skip = true, default_byte = b'3')]
+    skipped_field: [u8; 10],
 }
 
 // #[tokio::main]
@@ -74,13 +76,14 @@ fn main() {
         err_case: *b"12xx",
         name: *b"UNKNOWN   ",
         value: *b"0042",
+        skipped_field: *b"1234567890",
     };
     println!("{}", SomePayload::native_struct_code());
     println!("{:?}", payload);
     println!("{}", payload);
     let native = payload.to_native();
     let json = serde_json::to_string(&native).unwrap();
-    println!("{}", json);
+    println!("json: {}", json);
     let parsed = serde_json::from_str::<SomePayloadNative>(&json).unwrap();
     println!("{:?}", parsed);
     let payload_from_native = SomePayload::from_native(&parsed);

@@ -179,7 +179,7 @@ fn get_native_fields_and_map(
 
     for field in origin_fields {
         if let Some(attrs) = &field.attrs {
-            // Skip if this field has already been processed
+            // Skip if this field has already been processed or is marked as skip
             if processed.contains(&field.name.to_string()) {
                 continue;
             }
@@ -264,12 +264,18 @@ fn get_native_fields_and_map(
                         is_combined_datetime: false,
                         default_func: attrs.default_func.clone(),
                     };
-
-                    native_fields.push(native_field.clone());
-                    native_field_map.push(NativeField2OriginFieldMap {
-                        origin_field: field.clone(),
-                        native_field: Some(native_field),
-                    });
+                    if !attrs.skip {
+                        native_fields.push(native_field.clone());
+                        native_field_map.push(NativeField2OriginFieldMap {
+                            origin_field: field.clone(),
+                            native_field: Some(native_field),
+                        });
+                    } else {
+                        native_field_map.push(NativeField2OriginFieldMap {
+                            origin_field: field.clone(),
+                            native_field: None,
+                        });
+                    }
                 }
             }
         } else {

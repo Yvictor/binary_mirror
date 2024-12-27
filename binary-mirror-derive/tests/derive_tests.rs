@@ -814,3 +814,42 @@ fn test_custom_native_derives() {
     let _cloned = native.clone(); // Should compile because we have Clone
     let _debug = format!("{:?}", native); // Should compile because we have Debug
 }
+
+#[repr(C)]
+#[derive(BinaryMirror)]
+struct WithSkippedFields {
+    #[bm(type = "str")]
+    name: [u8; 10],
+    #[bm(type = "i32", skip = true, default_byte = b'\x33')]
+    skipped_value: [u8; 4],
+    #[bm(type = "str")]
+    description: [u8; 20],
+}
+
+#[test]
+fn test_skipped_fields() {
+    let native = WithSkippedFieldsNative::default()
+        .with_name("TEST")
+        .with_description("Description");
+
+    let raw = native.to_raw();
+
+    // Verify values
+    assert_eq!(raw.name(), "TEST");
+    assert_eq!(raw.description(), "Description");
+
+    // Verify native struct code doesn't include skipped field
+    let code = WithSkippedFields::native_struct_code();
+    assert_eq!(
+        code,
+        r#"pub struct WithSkippedFieldsNative {
+    pub name: String,
+    pub description: String,
+}"#
+    );
+
+    // Test roundtrip
+    let native2 = raw.to_native();
+    let raw2 = native2.to_raw();
+    assert_eq!(raw.to_bytes(), raw2.to_bytes());
+}
