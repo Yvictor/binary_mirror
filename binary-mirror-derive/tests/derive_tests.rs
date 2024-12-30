@@ -859,3 +859,43 @@ fn test_skipped_fields() {
     assert_eq!(WithSkippedFields::size(), 34);
     assert_eq!(WithSkippedFields::SIZE, 34);
 }
+
+#[repr(C)]
+#[derive(BinaryMirror)]
+struct WithSkipNativeStruct {
+    #[bm(type = "str")]
+    name: [u8; 10],
+    #[bm(type = "i32", skip_native = true)]
+    raw_value: [u8; 4],
+    #[bm(type = "str")]
+    description: [u8; 5],
+}
+
+#[test]
+fn test_skip_native() {
+    let raw = WithSkipNativeStruct {
+        name: *b"TEST      ",
+        raw_value: *b"1234",
+        description: *b"Descr",
+    };
+
+    // Field should be accessible in raw struct
+    assert_eq!(raw.raw_value(), Some(1234));
+
+    // Convert to native
+    let native = raw.to_native();
+    
+    // Field should not appear in native struct
+    let code = WithSkipNativeStruct::native_struct_code();
+    assert_eq!(
+        code,
+        r#"pub struct WithSkipNativeStructNative {
+    pub name: String,
+    pub description: String,
+}"#
+    );
+
+    // Roundtrip should preserve the raw value
+    let raw2 = native.to_raw();
+    assert_eq!(raw2.raw_value(), None);
+}

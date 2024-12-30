@@ -55,6 +55,8 @@ pub struct SomePayload {
     value: [u8; 4],
     #[bm(type = "str", skip = true, default_byte = b'3')]
     skipped_field: [u8; 10],
+    #[bm(type = "str", skip_native = true)]
+    skipped_field_native: [u8; 5],
 }
 
 // #[tokio::main]
@@ -83,6 +85,7 @@ fn main() {
         name: *b"UNKNOWN   ",
         value: *b"0042",
         skipped_field: *b"1234567890",
+        skipped_field_native: *b"12345",
     };
     println!("{}", SomePayload::native_struct_code());
     println!("{:?}", payload);

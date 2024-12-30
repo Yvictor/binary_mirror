@@ -21,6 +21,7 @@ struct FieldAttrs {
     format: Option<String>,
     datetime_with: Option<String>,
     skip: bool,
+    skip_native: bool,
     enum_type: Option<String>,
     default_byte: Option<u8>,
     ignore_warn: bool,
@@ -43,6 +44,7 @@ struct NativeField {
     origin_fields: Vec<OriginField>,
     is_combined_datetime: bool,
     default_func: Option<String>,
+    skip_native: bool,
 }
 
 #[derive(Debug)]
@@ -86,6 +88,7 @@ fn get_field_attrs(attrs: &[syn::Attribute]) -> Option<FieldAttrs> {
                 format: None,
                 datetime_with: None,
                 skip: false,
+                skip_native: false,
                 enum_type: None,
                 default_byte: None,
                 ignore_warn: false,
@@ -107,6 +110,8 @@ fn get_field_attrs(attrs: &[syn::Attribute]) -> Option<FieldAttrs> {
                     field_attrs.datetime_with = Some(lit.value());
                 } else if meta.path.is_ident("skip") {
                     field_attrs.skip = meta.value()?.parse::<syn::LitBool>()?.value();
+                } else if meta.path.is_ident("skip_native") {
+                    field_attrs.skip_native = meta.value()?.parse::<syn::LitBool>()?.value();
                 } else if meta.path.is_ident("enum_type") {
                     let lit = meta.value()?.parse::<LitStr>()?;
                     field_attrs.enum_type = Some(lit.value());
@@ -211,6 +216,7 @@ fn get_native_fields_and_map(
                         origin_fields: vec![field.clone(), time_field.clone()],
                         is_combined_datetime: true,
                         default_func: attrs.default_func.clone(),
+                        skip_native: attrs.skip_native,
                     };
                     native_fields.push(native_field.clone());
                     native_field_map.push(NativeField2OriginFieldMap {
@@ -263,6 +269,7 @@ fn get_native_fields_and_map(
                         origin_fields: vec![field.clone()],
                         is_combined_datetime: false,
                         default_func: attrs.default_func.clone(),
+                        skip_native: attrs.skip_native,
                     };
                     if !attrs.skip {
                         native_fields.push(native_field.clone());
@@ -573,6 +580,7 @@ fn get_display_fields(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenSt
 fn get_native_fields_token(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
     native_fields
         .iter()
+        .filter(|field| !field.skip_native)
         .map(|field| {
             let name = &field.name;
             let ty = &field.ty;
@@ -587,6 +595,7 @@ fn get_native_fields_token(native_fields: &[NativeField]) -> Vec<proc_macro2::To
 fn get_to_native_fields(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
     native_fields
         .iter()
+        .filter(|field| !field.skip_native)
         .map(|field| {
             let name = &field.name;
             let ignore_warn = field.origin_fields[0]
@@ -615,12 +624,18 @@ fn get_from_native_fields(
             .as_ref()
             .and_then(|attrs| attrs.default_byte)
             .unwrap_or(b' ');
+        
 
         if let Some(native_field) = &mapping.native_field {
             let native_name = &native_field.name;
             let attrs = mapping.origin_field.attrs.as_ref().unwrap();
             let format = attrs.format.as_ref().map(String::as_str);
-
+            let skip_native = native_field.skip_native;
+            if skip_native {
+                return quote! {
+                    #field_name: [#default_byte; #size]
+                };
+            }
             match attrs.type_name.as_str() {
                 "str" => quote! {
                     #field_name: {
@@ -742,6 +757,7 @@ fn get_from_native_fields(
 fn get_native_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
     native_fields
         .iter()
+        .filter(|field| !field.skip_native)
         .map(|field| {
             let name = &field.name;
             let method_name = quote::format_ident!("with_{}", name);
@@ -805,7 +821,7 @@ fn get_native_default_impl(
     native_fields: &[NativeField],
     native_name: &proc_macro2::Ident,
 ) -> proc_macro2::TokenStream {
-    let default_fields = native_fields.iter().map(|field| {
+    let default_fields = native_fields.iter().filter(|field| !field.skip_native).map(|field| {
         let name = &field.name;
         if let Some(default) = &field.default_func {
             // let default_quote = quote! { #default };
@@ -862,6 +878,7 @@ fn get_native_struct_code(
     let native_name = quote::format_ident!("{}Native", name);
     let fields_code = native_fields
         .iter()
+        .filter(|field| !field.skip_native)
         .map(|field| {
             let name = &field.name;
             let ty = &field.ty;
@@ -924,6 +941,15 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
     let native_struct_code = get_native_struct_code(name, &native_fields);
 
     let gen = quote! {
+        impl #name {
+            #(#methods)*
+            /// Get the size of the struct in bytes
+            pub const fn size() -> usize {
+                std::mem::size_of::<Self>()
+            }
+            #field_spec_methods
+        }
+
         #[derive(#native_derives)]
         pub struct #native_name {
             #(#native_fields_token,)*
@@ -931,18 +957,6 @@ fn impl_binary_mirror(input: &DeriveInput) -> TokenStream {
 
         impl #native_name {
             #(#native_methods)*
-        }
-
-        impl #name {
-            #(#methods)*
-
-            /// Get the size of the struct in bytes
-            pub const fn size() -> usize {
-                std::mem::size_of::<Self>()
-            }
-
-            #field_spec_methods
-
         }
 
         impl std::fmt::Debug for #name {
