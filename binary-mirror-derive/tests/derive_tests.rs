@@ -899,3 +899,32 @@ fn test_skip_native() {
     let raw2 = native.to_raw();
     assert_eq!(raw2.raw_value(), None);
 }
+
+#[repr(C)]
+#[derive(BinaryMirror)]
+struct WithStringTypes {
+    #[bm(type = "str")]
+    regular: [u8; 10],
+    #[bm(type = "compact_str")]
+    compact: [u8; 10],
+    // #[bm(type = "hipstr")]
+    // hip: [u8; 10],
+}
+
+#[test]
+fn test_string_types() {
+    
+    let native = WithStringTypesNative::default()
+        .with_regular("test")
+        .with_compact("test");
+        // .with_hip(HipStr::from("test"));
+
+    let raw = native.to_raw();
+    assert_eq!(raw.regular(), "test");
+    assert_eq!(raw.compact(), "test");
+    // assert_eq!(raw.hip(), "test");
+
+    // Test roundtrip
+    // let native2 = raw.to_native();
+    // assert_eq!(native2.hip, HipStr::from("test"));
+}

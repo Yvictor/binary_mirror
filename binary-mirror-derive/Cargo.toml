@@ -24,6 +24,7 @@ chrono = { version = "0.4", features = ["serde"] }
 binary-mirror = { version = "0.1.0", path = "../binary-mirror" }
 serde = { version = "1.0", features = ["derive"] }
 tracing = "0.1"
+compact_str = {version = "0.8", features = ["serde"]}
 
 [dev-dependencies]
 trybuild = "1.0"

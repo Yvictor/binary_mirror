@@ -231,6 +231,14 @@ fn get_native_fields_and_map(
                 _ => {
                     let (ty, pure_ty) = match attrs.type_name.as_str() {
                         "str" => (quote!(String), quote!(String)),
+                        "compact_str" => (
+                            quote!(compact_str::CompactString), 
+                            quote!(compact_str::CompactString)
+                        ),
+                        // "hipstr" => (
+                        //     quote!(hipstr::HipStr<'borrow>),
+                        //     quote!(hipstr::HipStr<'borrow>)
+                        // ),
                         "bytes" => {
                             let size = field.size;
                             (quote!([u8; #size]), quote!([u8; #size]))
@@ -371,13 +379,35 @@ fn get_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
                 match attrs.type_name.as_str() {
                     "str" => quote! {
                         pub fn #name(&self) -> String {
-                            String::from_utf8_lossy(&self.#origin_field).trim().to_string()
+                            String::from_utf8_lossy(&self.#origin_field.trim_ascii()).to_string()
                         }
 
                         pub fn #method_with_warn_name(&self) -> String {
-                            String::from_utf8_lossy(&self.#origin_field).trim().to_string()
+                            String::from_utf8_lossy(&self.#origin_field.trim_ascii()).to_string()
                         }
                     },
+                    "compact_str" => {
+                        quote! {
+                            pub fn #name(&self) -> compact_str::CompactString {
+                                compact_str::CompactString::from_utf8_lossy(&self.#origin_field.trim_ascii())
+                            }
+
+                            pub fn #method_with_warn_name(&self) -> compact_str::CompactString {
+                                compact_str::CompactString::from_utf8_lossy(&self.#origin_field.trim_ascii())
+                            }
+                        }
+                    },
+                    // "hipstr" => {
+                    //     quote! {
+                    //         pub fn #name(&self) -> hipstr::HipStr {
+                    //             hipstr::HipStr::from_utf8_lossy(hipstr::HipByt::borrowed(&self.#origin_field.trim_ascii()))
+                    //         }
+
+                    //         pub fn #method_with_warn_name(&self) -> hipstr::HipStr {
+                    //             hipstr::HipStr::from_utf8_lossy(hipstr::HipByt::borrowed(&self.#origin_field.trim_ascii()))
+                    //         }
+                    //     }
+                    // },
                     "bytes" => {
                         let size = field.origin_fields[0].size;
                         quote! {
@@ -549,7 +579,8 @@ fn get_display_fields(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenSt
             }
 
             Some(match attrs.type_name.as_str() {
-                "str" => quote! {
+                // | "hipstr" 
+                "str" | "compact_str" => quote! {
                     write!(f, "{}: {}", stringify!(#name), self.#method_name())?;
                 },
                 "i16" | "i32" | "i64" | "u16" | "u32" | "u64" | "f32" | "f64" | "decimal"
@@ -637,7 +668,8 @@ fn get_from_native_fields(
                 };
             }
             match attrs.type_name.as_str() {
-                "str" => quote! {
+                // | "hipstr" 
+                "str" | "compact_str" => quote! {
                     #field_name: {
                         let mut bytes = [#default_byte; #size];  // Use default_byte here
                         let s = native.#native_name.as_bytes();
@@ -771,6 +803,18 @@ fn get_native_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenSt
                         self
                     }
                 },
+                "compact_str" => quote! {
+                    pub fn #method_name(mut self, value: impl Into<compact_str::CompactString>) -> Self {
+                        self.#name = value.into();
+                        self
+                    }
+                },
+                // "hipstr" => quote! {
+                //     pub fn #method_name<'borrow>(mut self, value: impl Into<hipstr::HipStr<'borrow>>) -> Self {
+                //         self.#name = value.into();
+                //         self
+                //     }
+                // },
                 "i16" | "i32" | "i64" | "u16" | "u32" | "u64" | "f32" | "f64" | "decimal"
                 | "datetime" | "date" | "time" | "enum" => {
                     quote! {
@@ -828,6 +872,12 @@ fn get_native_default_impl(
             let default_quote = quote::format_ident!("{}", default.as_str());
             match field.type_name.as_str() {
                 "str" => quote! {
+                    #name: #default_quote()
+                },
+                "compact_str" => quote! {
+                    #name: #default_quote()
+                },
+                "hipstr" => quote! {
                     #name: #default_quote()
                 },
                 "i16" | "i32" | "i64" | "u16" | "u32" | "u64" | "f32" | "f64" | "datetime"

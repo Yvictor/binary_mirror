@@ -57,8 +57,11 @@ pub struct SomePayload {
     skipped_field: [u8; 10],
     #[bm(type = "str", skip_native = true)]
     skipped_field_native: [u8; 5],
+    #[bm(type = "compact_str")]
+    compact_str: [u8; 10],
+    // #[bm(type = "hipstr")]
+    // hipstr: [u8; 10],
 }
-
 // #[tokio::main]
 // async
 fn main() {
@@ -73,6 +76,7 @@ fn main() {
         .init();
     let n = now();
     println!("{}", n);
+
     let payload = SomePayload {
         company: *b"COMPANY   ",
         exh: *b"EXCHANGE",
@@ -86,6 +90,8 @@ fn main() {
         value: *b"0042",
         skipped_field: *b"1234567890",
         skipped_field_native: *b"12345",
+        compact_str: *b"12345678  ",
+        // hipstr: *b"1234567   ",
     };
     println!("{}", SomePayload::native_struct_code());
     println!("{:?}", payload);
