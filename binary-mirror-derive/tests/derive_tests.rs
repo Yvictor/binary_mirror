@@ -1,5 +1,6 @@
 use binary_mirror_derive::{BinaryEnum, BinaryMirror};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Timelike};
+use compact_str::ToCompactString;
 use rust_decimal::prelude::*;
 use serde::{Deserialize, Serialize};
 use binary_mirror::{FromBytes, ToBytes, ToNative, FromNative, NativeStructCode};
@@ -85,16 +86,16 @@ struct WithDefaultByte {
 #[test]
 fn test_with_default_byte() {
     let default_ = WithDefaultByteNative {
-        zero: String::from("11"),
+        zero: Some(String::from("11")),
     };
     println!("{:?}", default_);
     let raw = WithDefaultByte::from_native(&default_);
-    assert_eq!(raw.zero(), "1100000000");
+    assert_eq!(raw.zero(), Some("1100000000".to_string()));
 }
 
 #[repr(C)]
 #[derive(BinaryMirror)]
-struct WithDefaultBytes {
+struct WithDefaultBytes {   
     #[bm(type = "str", default_byte = b'\x08')] // 0x08 hex
     hex: [u8; 5],
     #[bm(type = "str", default_byte = b'\x00')] // Null in hex
@@ -132,11 +133,11 @@ fn test_struct_derivation() {
     };
     println!("{:?}", test);
 
-    assert_eq!(test.name(), "Hello");
+    assert_eq!(test.name(), Some("Hello".to_string()));
     assert_eq!(test.value(), Some(123));
     assert_eq!(test.decimal(), Some(Decimal::from_str("123.45").unwrap()));
     assert_eq!(test.f32(), Some(123.4));
-    assert_eq!(test.exchange(), "CME".to_string());
+    assert_eq!(test.exchange(), Some("CME".to_string()));
     assert_eq!(
         test.datetime(),
         Some(NaiveDateTime::new(
@@ -161,7 +162,7 @@ fn test_invalid_number() {
         side: *b" ",
     };
 
-    assert_eq!(test.name(), "Test");
+    assert_eq!(test.name(), Some("Test".to_string()));
     assert_eq!(test.value(), None);
     assert_eq!(test.decimal(), None);
     assert_eq!(test.f32(), None);
@@ -239,7 +240,7 @@ fn test_binary_enum() {
 fn test_struct_from_bytes() {
     let bytes = b"Hello     123 no_type000000123.4500000000123.4CME       20240101123456B";
     let test = TestStruct::from_bytes(bytes).expect("Should parse successfully");
-    assert_eq!(test.name(), "Hello");
+    assert_eq!(test.name(), Some("Hello".to_string()));
     assert_eq!(test.value(), Some(123));
 
     // Test wrong size
@@ -349,11 +350,11 @@ fn test_struct_from_native() {
 #[test]
 fn test_native_default() {
     let native = TestStructNative::default();
-    assert_eq!(native.name, "");
+    assert_eq!(native.name, None);
     assert_eq!(native.value, None);
     assert_eq!(native.decimal, None);
     assert_eq!(native.f32, None);
-    assert_eq!(native.exchange, "");
+    assert_eq!(native.exchange, None);
     assert_eq!(native.datetime, None);
     assert_eq!(native.side, None);
 }
@@ -457,11 +458,11 @@ fn test_native_builder() {
         ))
         .with_side(OrderSide::Buy);
 
-    assert_eq!(native.name, "AAPL");
+    assert_eq!(native.name, Some("AAPL".to_string()));
     assert_eq!(native.value, Some(123));
     assert_eq!(native.decimal, Some(Decimal::from_str("123.45").unwrap()));
     assert_eq!(native.f32, Some(123.4));
-    assert_eq!(native.exchange, "NYSE");
+    assert_eq!(native.exchange, Some("NYSE".to_string()));
     assert_eq!(
         native.datetime,
         Some(NaiveDateTime::new(
@@ -473,11 +474,11 @@ fn test_native_builder() {
 
     // Convert to binary format
     let binary = TestStruct::from_native(&native);
-    assert_eq!(binary.name(), "AAPL");
+    assert_eq!(binary.name(), Some("AAPL".to_string()));
     assert_eq!(binary.value(), Some(123));
     assert_eq!(binary.decimal(), Some(Decimal::from_str("123.45").unwrap()));
     assert_eq!(binary.f32(), Some(123.4));
-    assert_eq!(binary.exchange(), "NYSE");
+    assert_eq!(binary.exchange(), Some("NYSE".to_string()));
     assert_eq!(
         binary.datetime(),
         Some(NaiveDateTime::new(
@@ -715,7 +716,7 @@ fn test_defaults() {
     println!("{:?}", native);
     let binary = WithDefaults::from_native(&native);
     println!("{:?}", binary);
-    assert_eq!(binary.name(), "UNKNOWN");
+    assert_eq!(binary.name(), Some("UNKNOWN".to_string()));
     assert_eq!(binary.value(), Some(42));
     assert_eq!(binary.timestamp(), Some(now()));
     assert_eq!(binary.today(), Some(today()));
@@ -731,7 +732,7 @@ fn test_defaults() {
         .with_order_type(OrderType::Market);
 
     let binary = WithDefaults::from_native(&native);
-    assert_eq!(binary.name(), "TEST");
+    assert_eq!(binary.name(), Some("TEST".to_string()));
     assert_eq!(binary.value(), Some(100));
     assert_eq!(binary.decimal(), Some(Decimal::from_str("999.99").unwrap()));
     assert_eq!(binary.order_type(), Some(OrderType::Market));
@@ -756,11 +757,11 @@ fn test_native_to_raw() {
     let raw = native.to_raw();
 
     // Verify values
-    assert_eq!(raw.name(), "AAPL");
+    assert_eq!(raw.name(), Some("AAPL".to_string()));
     assert_eq!(raw.value(), Some(123));
     assert_eq!(raw.decimal(), Some(Decimal::from_str("123.45").unwrap()));
     assert_eq!(raw.f32(), Some(123.4));
-    assert_eq!(raw.exchange(), "NYSE");
+    assert_eq!(raw.exchange(), Some("NYSE".to_string()));
     assert_eq!(raw.datetime(), Some(NaiveDateTime::new(
         NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         NaiveTime::from_hms_opt(12, 34, 56).unwrap()
@@ -779,11 +780,11 @@ fn test_native_struct_code() {
     assert_eq!(
         code,
         r#"pub struct TestStructNative {
-    pub name: String,
+    pub name: Option<String>,
     pub value: Option<i32>,
     pub decimal: Option<rust_decimal::Decimal>,
     pub f32: Option<f32>,
-    pub exchange: String,
+    pub exchange: Option<String>,
     pub datetime: Option<chrono::NaiveDateTime>,
     pub side: Option<OrderSide>,
 }"#
@@ -805,7 +806,7 @@ fn test_custom_native_derives() {
     assert_eq!(
         code,
         r#"pub struct CustomDerivesNative {
-    pub name: String,
+    pub name: Option<String>,
 }"#
     );
 
@@ -837,18 +838,18 @@ fn test_skipped_fields() {
     let parsed = WithSkippedFields::from_bytes(&bytes).unwrap();
 
     // Verify values
-    assert_eq!(raw.name(), "TEST");
-    assert_eq!(raw.description(), "Description");
-    assert_eq!(parsed.name(), "TEST");
-    assert_eq!(parsed.description(), "Description");
+    assert_eq!(raw.name(), Some("TEST".to_string()));
+    assert_eq!(raw.description(), Some("Description".to_string()));
+    assert_eq!(parsed.name(), Some("TEST".to_string()));
+    assert_eq!(parsed.description(), Some("Description".to_string()));
 
     // Verify native struct code doesn't include skipped field
     let code = WithSkippedFields::native_struct_code();
     assert_eq!(
         code,
         r#"pub struct WithSkippedFieldsNative {
-    pub name: String,
-    pub description: String,
+    pub name: Option<String>,
+    pub description: Option<String>,
 }"#
     );
 
@@ -890,8 +891,8 @@ fn test_skip_native() {
     assert_eq!(
         code,
         r#"pub struct WithSkipNativeStructNative {
-    pub name: String,
-    pub description: String,
+    pub name: Option<String>,
+    pub description: Option<String>,
 }"#
     );
 
@@ -920,8 +921,8 @@ fn test_string_types() {
         // .with_hip(HipStr::from("test"));
 
     let raw = native.to_raw();
-    assert_eq!(raw.regular(), "test");
-    assert_eq!(raw.compact(), "test");
+    assert_eq!(raw.regular(), Some("test".to_string()));
+    assert_eq!(raw.compact(), Some("test".to_compact_string()));
     // assert_eq!(raw.hip(), "test");
 
     // Test roundtrip

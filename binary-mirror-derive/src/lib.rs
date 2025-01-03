@@ -230,9 +230,9 @@ fn get_native_fields_and_map(
                 }
                 _ => {
                     let (ty, pure_ty) = match attrs.type_name.as_str() {
-                        "str" => (quote!(String), quote!(String)),
+                        "str" => (quote!(Option<String>), quote!(String)),
                         "compact_str" => (
-                            quote!(compact_str::CompactString), 
+                            quote!(Option<compact_str::CompactString>), 
                             quote!(compact_str::CompactString)
                         ),
                         // "hipstr" => (
@@ -354,11 +354,11 @@ fn get_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
                 quote! {
                     pub fn #name(&self) -> Option<chrono::NaiveDateTime> {
                         let date = chrono::NaiveDate::parse_from_str(
-                            String::from_utf8_lossy(&self.#date_field).trim(),
+                            std::str::from_utf8(&self.#date_field.trim_ascii()).ok()?,
                             #date_format
                         ).ok()?;
                         let time = chrono::NaiveTime::parse_from_str(
-                            String::from_utf8_lossy(&self.#time_field).trim(),
+                            std::str::from_utf8(&self.#time_field.trim_ascii()).ok()?,
                             #time_format
                         ).ok()?;
                         Some(chrono::NaiveDateTime::new(date, time))
@@ -376,24 +376,39 @@ fn get_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
                 }
             } else {
                 let attrs = field.origin_fields[0].attrs.as_ref().unwrap();
+                // let expect_str = format!("Failed to convert {} to string", name);
+                // let expect_lit = syn::LitStr::new(&expect_str, proc_macro2::Span::call_site());
+                // TODO string also return Option<String>
                 match attrs.type_name.as_str() {
                     "str" => quote! {
-                        pub fn #name(&self) -> String {
-                            String::from_utf8_lossy(&self.#origin_field.trim_ascii()).to_string()
+                        pub fn #name(&self) -> Option<String> {
+                            std::str::from_utf8(&self.#origin_field.trim_ascii()).ok().map(|s| s.to_string())
                         }
 
-                        pub fn #method_with_warn_name(&self) -> String {
-                            String::from_utf8_lossy(&self.#origin_field.trim_ascii()).to_string()
+                        pub fn #method_with_warn_name(&self) -> Option<String> {
+                            match self.#name() {
+                                Some(s) => Some(s),
+                                None => {
+                                    #debug_bytes
+                                    return None;
+                                }
+                            }
                         }
                     },
                     "compact_str" => {
                         quote! {
-                            pub fn #name(&self) -> compact_str::CompactString {
-                                compact_str::CompactString::from_utf8_lossy(&self.#origin_field.trim_ascii())
+                            pub fn #name(&self) -> Option<compact_str::CompactString> {
+                                compact_str::CompactString::from_utf8(&self.#origin_field.trim_ascii()).ok()
                             }
 
-                            pub fn #method_with_warn_name(&self) -> compact_str::CompactString {
-                                compact_str::CompactString::from_utf8_lossy(&self.#origin_field.trim_ascii())
+                            pub fn #method_with_warn_name(&self) -> Option<compact_str::CompactString> {
+                                match self.#name() {
+                                    Some(s) => Some(s),
+                                    None => {
+                                        #debug_bytes
+                                        return None;
+                                    }
+                                }
                             }
                         }
                     },
@@ -424,8 +439,8 @@ fn get_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
                         let type_ident = quote::format_ident!("{}", attrs.type_name);
                         quote! {
                             pub fn #name(&self) -> Option<#type_ident> {
-                                String::from_utf8_lossy(&self.#origin_field)
-                                    .trim()
+                                std::str::from_utf8(&self.#origin_field.trim_ascii())
+                                    .ok()?
                                     .parse::<#type_ident>()
                                     .ok()
                             }
@@ -443,8 +458,8 @@ fn get_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
                     }
                     "decimal" => quote! {
                         pub fn #name(&self) -> Option<rust_decimal::Decimal> {
-                            String::from_utf8_lossy(&self.#origin_field)
-                                .trim()
+                            std::str::from_utf8(&self.#origin_field.trim_ascii())
+                                .ok()?
                                 .parse::<rust_decimal::Decimal>()
                                 .ok()
                                 .map(|d| d.normalize())
@@ -469,7 +484,7 @@ fn get_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
                         quote! {
                             pub fn #name(&self) -> Option<chrono::NaiveDateTime> {
                                 chrono::NaiveDateTime::parse_from_str(
-                                    String::from_utf8_lossy(&self.#origin_field).trim(),
+                                    std::str::from_utf8(&self.#origin_field.trim_ascii()).ok()?,
                                     #format
                                 ).ok()
                             }
@@ -496,7 +511,7 @@ fn get_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
                         quote! {
                             pub fn #name(&self) -> Option<chrono::NaiveDate> {
                                 chrono::NaiveDate::parse_from_str(
-                                    String::from_utf8_lossy(&self.#origin_field).trim(),
+                                    std::str::from_utf8(&self.#origin_field.trim_ascii()).ok()?,
                                     #format
                                 )
                                 .ok()
@@ -521,7 +536,7 @@ fn get_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenStream> {
                         quote! {
                             pub fn #name(&self) -> Option<chrono::NaiveTime> {
                                 chrono::NaiveTime::parse_from_str(
-                                    String::from_utf8_lossy(&self.#origin_field).trim(),
+                                    std::str::from_utf8(&self.#origin_field.trim_ascii()).ok()?,
                                     #format
                                 )
                                 .ok()
@@ -580,10 +595,10 @@ fn get_display_fields(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenSt
 
             Some(match attrs.type_name.as_str() {
                 // | "hipstr" 
-                "str" | "compact_str" => quote! {
-                    write!(f, "{}: {}", stringify!(#name), self.#method_name())?;
-                },
-                "i16" | "i32" | "i64" | "u16" | "u32" | "u64" | "f32" | "f64" | "decimal"
+                // "str" | "compact_str" => quote! {
+                //     write!(f, "{}: {}", stringify!(#name), self.#method_name())?;
+                // },
+                "str" | "compact_str" | "i16" | "i32" | "i64" | "u16" | "u32" | "u64" | "f32" | "f64" | "decimal"
                 | "datetime" | "date" | "time" => quote! {
                     match self.#method_name() {
                         Some(val) => write!(f, "{}: {}", stringify!(#name), val)?,
@@ -672,8 +687,10 @@ fn get_from_native_fields(
                 "str" | "compact_str" => quote! {
                     #field_name: {
                         let mut bytes = [#default_byte; #size];  // Use default_byte here
-                        let s = native.#native_name.as_bytes();
-                        bytes[..s.len().min(#size)].copy_from_slice(&s[..s.len().min(#size)]);
+                        if let Some(s) = &native.#native_name {
+                            let s = s.as_bytes();
+                            bytes[..s.len().min(#size)].copy_from_slice(&s[..s.len().min(#size)]);
+                        }
                         bytes
                     }
                 },
@@ -799,13 +816,13 @@ fn get_native_methods(native_fields: &[NativeField]) -> Vec<proc_macro2::TokenSt
             match type_name.as_str() {
                 "str" => quote! {
                     pub fn #method_name(mut self, value: impl Into<String>) -> Self {
-                        self.#name = value.into();
+                        self.#name = Some(value.into());
                         self
                     }
                 },
                 "compact_str" => quote! {
                     pub fn #method_name(mut self, value: impl Into<compact_str::CompactString>) -> Self {
-                        self.#name = value.into();
+                        self.#name = Some(value.into());
                         self
                     }
                 },
@@ -871,16 +888,10 @@ fn get_native_default_impl(
             // let default_quote = quote! { #default };
             let default_quote = quote::format_ident!("{}", default.as_str());
             match field.type_name.as_str() {
-                "str" => quote! {
-                    #name: #default_quote()
-                },
-                "compact_str" => quote! {
-                    #name: #default_quote()
-                },
-                "hipstr" => quote! {
-                    #name: #default_quote()
-                },
-                "i16" | "i32" | "i64" | "u16" | "u32" | "u64" | "f32" | "f64" | "datetime"
+                // "hipstr" => quote! {
+                //     #name: Some(#default_quote())
+                // },
+                "str"| "compact_str" | "i16" | "i32" | "i64" | "u16" | "u32" | "u64" | "f32" | "f64" | "datetime"
                 | "date" | "time" | "enum" | "decimal" => {
                     quote! {
                         #name: Some(#default_quote())
