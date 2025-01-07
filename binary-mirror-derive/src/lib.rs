@@ -175,16 +175,14 @@ fn get_origin_fields(input: &DeriveInput) -> Vec<OriginField> {
         .collect()
 }
 
-fn get_native_fields_and_map(
-    origin_fields: &[OriginField],
-) -> (Vec<NativeField>, Vec<NativeField2OriginFieldMap>) {
+fn get_native_fields_and_map(origin_fields: &[OriginField]) -> (Vec<NativeField>, Vec<NativeField2OriginFieldMap>) {
     let mut native_fields = Vec::new();
     let mut native_field_map = Vec::new();
     let mut processed = std::collections::HashSet::new();
 
     for field in origin_fields {
         if let Some(attrs) = &field.attrs {
-            // Skip if this field has already been processed or is marked as skip
+            // Skip if this field has already been processed
             if processed.contains(&field.name.to_string()) {
                 continue;
             }
@@ -196,35 +194,42 @@ fn get_native_fields_and_map(
             };
 
             match attrs.type_name.as_str() {
-                "date" if attrs.datetime_with.is_some() => {
-                    let time_field_name = attrs.datetime_with.as_ref().unwrap();
-                    let time_field = origin_fields
+                "date" | "time" if attrs.datetime_with.is_some() => {
+                    let other_field_name = attrs.datetime_with.as_ref().unwrap();
+                    let other_field = origin_fields
                         .iter()
-                        .find(|f| f.name == quote::format_ident!("{}", time_field_name))
-                        .expect("Could not find time field");
+                        .find(|f| f.name == quote::format_ident!("{}", other_field_name))
+                        .expect("Could not find datetime pair field");
 
-                    processed.insert(time_field.name.to_string());
+                    // Mark both fields as processed
+                    processed.insert(field.name.to_string());
+                    processed.insert(other_field.name.to_string());
+
+                    // Determine which is date and which is time
+                    let (date_field, time_field) = if attrs.type_name == "date" {
+                        (field, other_field)
+                    } else {
+                        (other_field, field)
+                    };
+
                     let native_field = NativeField {
-                        name: if let Some(alias) = &attrs.alias {
-                            quote::format_ident!("{}", alias)
-                        } else {
-                            quote::format_ident!("datetime")
-                        },
+                        name: field_name,
                         ty: quote!(Option<chrono::NaiveDateTime>),
                         type_name: "datetime".to_string(),
                         pure_ty: quote!(chrono::NaiveDateTime),
-                        origin_fields: vec![field.clone(), time_field.clone()],
+                        origin_fields: vec![date_field.clone(), time_field.clone()],
                         is_combined_datetime: true,
                         default_func: attrs.default_func.clone(),
                         skip_native: attrs.skip_native,
                     };
+
                     native_fields.push(native_field.clone());
                     native_field_map.push(NativeField2OriginFieldMap {
                         origin_field: field.clone(),
                         native_field: Some(native_field.clone()),
                     });
                     native_field_map.push(NativeField2OriginFieldMap {
-                        origin_field: time_field.clone(),
+                        origin_field: other_field.clone(),
                         native_field: Some(native_field),
                     });
                 }

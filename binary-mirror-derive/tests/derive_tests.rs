@@ -1,9 +1,9 @@
+use binary_mirror::{FromBytes, FromNative, NativeStructCode, ToBytes, ToNative};
 use binary_mirror_derive::{BinaryEnum, BinaryMirror};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use compact_str::ToCompactString;
 use rust_decimal::prelude::*;
 use serde::{Deserialize, Serialize};
-use binary_mirror::{FromBytes, ToBytes, ToNative, FromNative, NativeStructCode};
 
 #[derive(Debug, PartialEq, BinaryEnum, Serialize, Deserialize)]
 enum OrderSide {
@@ -95,7 +95,7 @@ fn test_with_default_byte() {
 
 #[repr(C)]
 #[derive(BinaryMirror)]
-struct WithDefaultBytes {   
+struct WithDefaultBytes {
     #[bm(type = "str", default_byte = b'\x08')] // 0x08 hex
     hex: [u8; 5],
     #[bm(type = "str", default_byte = b'\x00')] // Null in hex
@@ -762,10 +762,13 @@ fn test_native_to_raw() {
     assert_eq!(raw.decimal(), Some(Decimal::from_str("123.45").unwrap()));
     assert_eq!(raw.f32(), Some(123.4));
     assert_eq!(raw.exchange(), Some("NYSE".to_string()));
-    assert_eq!(raw.datetime(), Some(NaiveDateTime::new(
-        NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-        NaiveTime::from_hms_opt(12, 34, 56).unwrap()
-    )));
+    assert_eq!(
+        raw.datetime(),
+        Some(NaiveDateTime::new(
+            NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            NaiveTime::from_hms_opt(12, 34, 56).unwrap()
+        ))
+    );
     assert_eq!(raw.side(), Some(OrderSide::Buy));
 
     // Test roundtrip
@@ -790,7 +793,6 @@ fn test_native_struct_code() {
 }"#
     );
 }
-
 
 #[repr(C)]
 #[derive(BinaryMirror)]
@@ -885,7 +887,7 @@ fn test_skip_native() {
 
     // Convert to native
     let native = raw.to_native();
-    
+
     // Field should not appear in native struct
     let code = WithSkipNativeStruct::native_struct_code();
     assert_eq!(
@@ -914,11 +916,10 @@ struct WithStringTypes {
 
 #[test]
 fn test_string_types() {
-    
     let native = WithStringTypesNative::default()
         .with_regular("test")
         .with_compact("test");
-        // .with_hip(HipStr::from("test"));
+    // .with_hip(HipStr::from("test"));
 
     let raw = native.to_raw();
     assert_eq!(raw.regular(), Some("test".to_string()));
@@ -928,4 +929,51 @@ fn test_string_types() {
     // Test roundtrip
     // let native2 = raw.to_native();
     // assert_eq!(native2.hip, HipStr::from("test"));
+}
+
+#[repr(C)]
+#[derive(BinaryMirror)]
+struct ReversedDateTime {
+    #[bm(
+        type = "time",
+        format = "%H:%M:%S",
+        datetime_with = "date",
+        alias = "datetime"
+    )]
+    time: [u8; 8],
+    #[bm(type = "date", format = "%Y-%m-%d")]
+    date: [u8; 10],
+    #[bm(type = "date", format = "%Y-%m-%d", datetime_with = "tt", alias = "ddtt")]
+    dd: [u8; 10],
+    #[bm(type = "time", format = "%H:%M:%S")]
+    tt: [u8; 8],
+}
+
+#[test]
+fn test_reversed_datetime() {
+    let raw = ReversedDateTime {
+        time: *b"12:34:56",
+        date: *b"2024-01-01",
+        dd: *b"2024-01-02",
+        tt: *b"12:34:56",
+    };
+
+    // Test parsing
+    assert_eq!(
+        raw.datetime(),
+        Some(NaiveDateTime::new(
+            NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            NaiveTime::from_hms_opt(12, 34, 56).unwrap()
+        ))
+    );
+    assert_eq!(raw.ddtt(), Some(NaiveDateTime::new(
+        NaiveDate::from_ymd_opt(2024, 1, 2).unwrap(),
+        NaiveTime::from_hms_opt(12, 34, 56).unwrap()
+    )));
+
+    // Test roundtrip
+    let native = raw.to_native();
+    let raw2 = native.to_raw();
+    assert_eq!(raw.datetime(), raw2.datetime());
+    assert_eq!(raw.to_bytes(), raw2.to_bytes());
 }
